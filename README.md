@@ -88,9 +88,9 @@ out of scope for the hackathon build.
 
 **A real sandbox payment** (order `26R58752UG7226808`, capture `2N277259EM994623R`, $500.00, 30 Oct 2026):
 
-| Approve in PayPal | Confirmed on return |
-| --- | --- |
-| ![PayPal review](docs/screenshots/12-paypal-review.png) | ![Payment confirmed](docs/screenshots/13-payment-confirmed.png) |
+| Approve in PayPal | Client sees it pending | Confirmed on return |
+| --- | --- | --- |
+| ![PayPal review](docs/screenshots/12-paypal-review.png) | ![Awaiting approval](docs/screenshots/18-payment-awaiting.png) | ![Payment confirmed](docs/screenshots/13-payment-confirmed.png) |
 
 | Frozen snapshot (client) | Frozen snapshot (console) |
 | --- | --- |
