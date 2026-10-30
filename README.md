@@ -86,6 +86,22 @@ out of scope for the hackathon build.
 | --- | --- |
 | ![Model draft](docs/screenshots/07-model-draft.png) | ![Model options](docs/screenshots/08-model-options.png) |
 
+**A real sandbox payment** (order `26R58752UG7226808`, capture `2N277259EM994623R`, $500.00, 30 Oct 2026):
+
+| Approve in PayPal | Confirmed on return |
+| --- | --- |
+| ![PayPal review](docs/screenshots/12-paypal-review.png) | ![Payment confirmed](docs/screenshots/13-payment-confirmed.png) |
+
+| Frozen snapshot (client) | Frozen snapshot (console) |
+| --- | --- |
+| ![Client snapshot](docs/screenshots/14-order-snapshot-client.png) | ![Console snapshot](docs/screenshots/15-order-snapshot-seller.png) |
+
+**When PayPal never answers** (fault injected with a 1 ms timeout):
+
+| Stuck but visible | Recovered with the same request id |
+| --- | --- |
+| ![Verifying](docs/screenshots/16-payment-verifying.png) | ![Retried](docs/screenshots/17-payment-retry-recovered.png) |
+
 ---
 
 ## Architecture
