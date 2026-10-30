@@ -42,3 +42,6 @@ Thumbs.db
 
 # 图表校验时生成的浏览器配置目录
 docs/.chrome-review*/
+
+# IDE / agent 工作区数据
+.codebuddy/
