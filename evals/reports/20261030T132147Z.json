@@ -1,0 +1,458 @@
+{
+  "generated_at": "2026-10-30T13:21:47.045811+00:00",
+  "model": "deepseek-v4.1-flash",
+  "prompt_version": "facts-v6",
+  "rule_version": 1,
+  "runs_per_case": 1,
+  "workers": 1,
+  "timeout_seconds": 120.0,
+  "pause_seconds": 2.0,
+  "cases": 19,
+  "summary": {
+    "baseline": {
+      "calls": 19,
+      "parsed": 5,
+      "parse_failures": 14,
+      "avg_latency_ms": 4301,
+      "p95_latency_ms": 5363,
+      "prompt_tokens": 1278,
+      "completion_tokens": 488,
+      "unpriced_or_wrong_price": 0,
+      "false_promises": 1,
+      "unknown_addons": 0,
+      "unsafe_releases": 1,
+      "unsafe_rate": 0.2
+    },
+    "pipeline": {
+      "calls": 19,
+      "parsed": 7,
+      "parse_failures": 12,
+      "avg_latency_ms": 3731,
+      "p95_latency_ms": 4916,
+      "prompt_tokens": 1922,
+      "completion_tokens": 272,
+      "helpful_options": 0,
+      "honest_no_solution": 5,
+      "unsafe_releases": 0
+    }
+  },
+  "rows": [
+    {
+      "arm": "baseline",
+      "case": "case-01-missing-both",
+      "latency_ms": 5363,
+      "prompt_tokens": 254,
+      "completion_tokens": 107,
+      "parsed": true,
+      "pages": 1,
+      "addons": [],
+      "total_usd": 500.0,
+      "claimed_feasible": true,
+      "rule_total_minor": 50000,
+      "rule_feasible": false,
+      "price_mismatch": false,
+      "false_promise": true,
+      "unknown_addons": [],
+      "unsafe": true
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-01-missing-both",
+      "latency_ms": 4915,
+      "prompt_tokens": 266,
+      "completion_tokens": 38,
+      "parsed": true,
+      "options": 1,
+      "feasible_options": 0,
+      "totals": [
+        50000
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-02-missing-budget",
+      "latency_ms": 5699,
+      "prompt_tokens": 180,
+      "completion_tokens": 409,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-02-missing-budget",
+      "latency_ms": 2895,
+      "prompt_tokens": 270,
+      "completion_tokens": 40,
+      "parsed": true,
+      "options": 1,
+      "feasible_options": 0,
+      "totals": [
+        50000
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-03-missing-deadline",
+      "latency_ms": 8038,
+      "prompt_tokens": 176,
+      "completion_tokens": 338,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-03-missing-deadline",
+      "latency_ms": 2484,
+      "prompt_tokens": 268,
+      "completion_tokens": 40,
+      "parsed": true,
+      "options": 1,
+      "feasible_options": 0,
+      "totals": [
+        50000
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-04-budget-gap",
+      "latency_ms": 5487,
+      "prompt_tokens": 181,
+      "completion_tokens": 529,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-04-budget-gap",
+      "latency_ms": 3836,
+      "prompt_tokens": 276,
+      "completion_tokens": 36,
+      "parsed": true,
+      "options": 2,
+      "feasible_options": 1,
+      "totals": [
+        70000,
+        50000
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-05-exact-budget",
+      "latency_ms": 3404,
+      "prompt_tokens": 180,
+      "completion_tokens": 287,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-05-exact-budget",
+      "latency_ms": 3129,
+      "prompt_tokens": 124,
+      "completion_tokens": 115,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "baseline",
+      "case": "case-06-unsupported-ordering",
+      "latency_ms": 4682,
+      "prompt_tokens": 253,
+      "completion_tokens": 109,
+      "parsed": true,
+      "pages": 1,
+      "addons": [],
+      "total_usd": 500.0,
+      "claimed_feasible": true,
+      "rule_total_minor": 50000,
+      "rule_feasible": true,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-06-unsupported-ordering",
+      "latency_ms": 3039,
+      "prompt_tokens": 275,
+      "completion_tokens": 48,
+      "parsed": true,
+      "options": 2,
+      "feasible_options": 1,
+      "totals": [
+        50000,
+        50000
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-07-unsupported-multilanguage",
+      "latency_ms": 4532,
+      "prompt_tokens": 181,
+      "completion_tokens": 403,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-07-unsupported-multilanguage",
+      "latency_ms": 4930,
+      "prompt_tokens": 128,
+      "completion_tokens": 243,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "baseline",
+      "case": "case-08-deadline-conflict-no-assets",
+      "latency_ms": 3012,
+      "prompt_tokens": 260,
+      "completion_tokens": 82,
+      "parsed": true,
+      "pages": 1,
+      "addons": [],
+      "total_usd": 500.0,
+      "claimed_feasible": false,
+      "rule_total_minor": 50000,
+      "rule_feasible": false,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-08-deadline-conflict-no-assets",
+      "latency_ms": 4037,
+      "prompt_tokens": 286,
+      "completion_tokens": 35,
+      "parsed": true,
+      "options": 1,
+      "feasible_options": 0,
+      "totals": [
+        50000
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-09-deadline-exact",
+      "latency_ms": 4464,
+      "prompt_tokens": 182,
+      "completion_tokens": 378,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-09-deadline-exact",
+      "latency_ms": 4137,
+      "prompt_tokens": 127,
+      "completion_tokens": 211,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "baseline",
+      "case": "case-10-deadline-one-day-short",
+      "latency_ms": 3117,
+      "prompt_tokens": 257,
+      "completion_tokens": 102,
+      "parsed": true,
+      "pages": 1,
+      "addons": [],
+      "total_usd": 500.0,
+      "claimed_feasible": false,
+      "rule_total_minor": 50000,
+      "rule_feasible": false,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-10-deadline-one-day-short",
+      "latency_ms": 4916,
+      "prompt_tokens": 281,
+      "completion_tokens": 35,
+      "parsed": true,
+      "options": 1,
+      "feasible_options": 0,
+      "totals": [
+        50000
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-11-copywriting-over-budget",
+      "latency_ms": 5416,
+      "prompt_tokens": 184,
+      "completion_tokens": 382,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-11-copywriting-over-budget",
+      "latency_ms": 4144,
+      "prompt_tokens": 130,
+      "completion_tokens": 224,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "baseline",
+      "case": "case-12-revision-addon-fits",
+      "latency_ms": 4939,
+      "prompt_tokens": 183,
+      "completion_tokens": 306,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-12-revision-addon-fits",
+      "latency_ms": 3743,
+      "prompt_tokens": 129,
+      "completion_tokens": 160,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "baseline",
+      "case": "case-13-external-link-free",
+      "latency_ms": 5648,
+      "prompt_tokens": 180,
+      "completion_tokens": 316,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-13-external-link-free",
+      "latency_ms": 5359,
+      "prompt_tokens": 124,
+      "completion_tokens": 132,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "baseline",
+      "case": "case-14-zero-pages",
+      "latency_ms": 5334,
+      "prompt_tokens": 254,
+      "completion_tokens": 88,
+      "parsed": true,
+      "pages": 0,
+      "addons": [],
+      "total_usd": 0.0,
+      "claimed_feasible": false,
+      "rule_total_minor": 0,
+      "rule_feasible": false,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-14-zero-pages",
+      "latency_ms": 3961,
+      "prompt_tokens": 274,
+      "completion_tokens": 40,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "baseline",
+      "case": "case-15-unknown-addon",
+      "latency_ms": 5653,
+      "prompt_tokens": 177,
+      "completion_tokens": 435,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-15-unknown-addon",
+      "latency_ms": 6102,
+      "prompt_tokens": 121,
+      "completion_tokens": 230,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "baseline",
+      "case": "case-16-large-page-count",
+      "latency_ms": 8748,
+      "prompt_tokens": 179,
+      "completion_tokens": 281,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-16-large-page-count",
+      "latency_ms": 4534,
+      "prompt_tokens": 122,
+      "completion_tokens": 313,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "baseline",
+      "case": "case-17-unsupported-and-over-budget",
+      "latency_ms": 6343,
+      "prompt_tokens": 181,
+      "completion_tokens": 329,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-17-unsupported-and-over-budget",
+      "latency_ms": 4917,
+      "prompt_tokens": 128,
+      "completion_tokens": 376,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "baseline",
+      "case": "case-18-three-problems-at-once",
+      "latency_ms": 4517,
+      "prompt_tokens": 189,
+      "completion_tokens": 444,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-18-three-problems-at-once",
+      "latency_ms": 6982,
+      "prompt_tokens": 136,
+      "completion_tokens": 799,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "baseline",
+      "case": "case-19-single-page-tight-deadline",
+      "latency_ms": 4468,
+      "prompt_tokens": 183,
+      "completion_tokens": 369,
+      "parsed": false,
+      "error": "unparseable"
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-19-single-page-tight-deadline",
+      "latency_ms": 4209,
+      "prompt_tokens": 131,
+      "completion_tokens": 271,
+      "parsed": false,
+      "error": "unparseable"
+    }
+  ]
+}

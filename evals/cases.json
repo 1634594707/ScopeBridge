@@ -1,0 +1,422 @@
+[
+  {
+    "id": "case-01-missing-both",
+    "title": "No budget and no deadline stated",
+    "kind": "validation",
+    "brief": "We need a website for our bakery. It should look modern and mention our opening hours.",
+    "input": {
+      "pages": 1,
+      "addon_codes": [],
+      "requested_features": ["landing_pages"],
+      "assets_ready": true,
+      "budget_minor": null,
+      "deadline": null,
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "feasible": false,
+      "total_minor": 50000,
+      "violation_codes": [],
+      "missing_fields": ["budget_minor", "deadline"]
+    }
+  },
+  {
+    "id": "case-02-missing-budget",
+    "title": "Deadline given, budget missing",
+    "kind": "validation",
+    "brief": "One page site for a bike repair shop, live before December.",
+    "input": {
+      "pages": 1,
+      "addon_codes": [],
+      "requested_features": ["landing_pages"],
+      "assets_ready": true,
+      "budget_minor": null,
+      "deadline": "2026-11-30",
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "feasible": false,
+      "total_minor": 50000,
+      "violation_codes": [],
+      "missing_fields": ["budget_minor"]
+    }
+  },
+  {
+    "id": "case-03-missing-deadline",
+    "title": "Budget given, deadline missing",
+    "kind": "validation",
+    "brief": "A single landing page, our budget is 600 dollars.",
+    "input": {
+      "pages": 1,
+      "addon_codes": [],
+      "requested_features": ["landing_pages"],
+      "assets_ready": true,
+      "budget_minor": 60000,
+      "deadline": null,
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "feasible": false,
+      "total_minor": 50000,
+      "violation_codes": [],
+      "missing_fields": ["deadline"]
+    }
+  },
+  {
+    "id": "case-04-budget-gap",
+    "title": "Three pages against a 500 dollar budget",
+    "kind": "validation",
+    "brief": "We need three pages and our budget is 500 dollars.",
+    "input": {
+      "pages": 3,
+      "addon_codes": [],
+      "requested_features": ["landing_pages"],
+      "assets_ready": true,
+      "budget_minor": 50000,
+      "deadline": "2026-11-30",
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "feasible": false,
+      "total_minor": 70000,
+      "violation_codes": ["budget_exceeded"],
+      "missing_fields": []
+    }
+  },
+  {
+    "id": "case-05-exact-budget",
+    "title": "Three pages at exactly 700 dollars",
+    "kind": "validation",
+    "brief": "Three pages, budget 700 dollars, assets ready.",
+    "input": {
+      "pages": 3,
+      "addon_codes": [],
+      "requested_features": ["landing_pages"],
+      "assets_ready": true,
+      "budget_minor": 70000,
+      "deadline": "2026-11-30",
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "feasible": true,
+      "total_minor": 70000,
+      "violation_codes": [],
+      "missing_fields": []
+    }
+  },
+  {
+    "id": "case-06-unsupported-ordering",
+    "title": "On-site ordering requested",
+    "kind": "validation",
+    "brief": "One page with online ordering built into the site.",
+    "input": {
+      "pages": 1,
+      "addon_codes": [],
+      "requested_features": ["landing_pages", "on_site_ordering"],
+      "assets_ready": true,
+      "budget_minor": 50000,
+      "deadline": "2026-11-30",
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "feasible": false,
+      "total_minor": 50000,
+      "violation_codes": ["capability_unavailable"],
+      "missing_fields": []
+    }
+  },
+  {
+    "id": "case-07-unsupported-multilanguage",
+    "title": "Bilingual site requested",
+    "kind": "validation",
+    "brief": "One page in English and Spanish, switching without a reload.",
+    "input": {
+      "pages": 1,
+      "addon_codes": [],
+      "requested_features": ["landing_pages", "multi_language"],
+      "assets_ready": true,
+      "budget_minor": 80000,
+      "deadline": "2026-11-30",
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "feasible": false,
+      "total_minor": 50000,
+      "violation_codes": ["capability_unavailable"],
+      "missing_fields": []
+    }
+  },
+  {
+    "id": "case-08-deadline-conflict-no-assets",
+    "title": "Six days to launch without assets",
+    "kind": "validation",
+    "brief": "We need it live by 5 November. Photos and copy are not ready yet.",
+    "input": {
+      "pages": 1,
+      "addon_codes": [],
+      "requested_features": ["landing_pages"],
+      "assets_ready": false,
+      "budget_minor": 50000,
+      "deadline": "2026-11-05",
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "feasible": false,
+      "total_minor": 50000,
+      "violation_codes": ["deadline_conflict"],
+      "missing_fields": []
+    }
+  },
+  {
+    "id": "case-09-deadline-exact",
+    "title": "Deadline exactly at the earliest delivery",
+    "kind": "validation",
+    "brief": "Everything is ready; we can go live on 6 November.",
+    "input": {
+      "pages": 1,
+      "addon_codes": [],
+      "requested_features": ["landing_pages"],
+      "assets_ready": true,
+      "budget_minor": 50000,
+      "deadline": "2026-11-06",
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "feasible": true,
+      "total_minor": 50000,
+      "violation_codes": [],
+      "missing_fields": []
+    }
+  },
+  {
+    "id": "case-10-deadline-one-day-short",
+    "title": "One day earlier than the lead time allows",
+    "kind": "validation",
+    "brief": "Could we have it live on 5 November? Everything is ready.",
+    "input": {
+      "pages": 1,
+      "addon_codes": [],
+      "requested_features": ["landing_pages"],
+      "assets_ready": true,
+      "budget_minor": 50000,
+      "deadline": "2026-11-05",
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "feasible": false,
+      "total_minor": 50000,
+      "violation_codes": ["deadline_conflict"],
+      "missing_fields": []
+    }
+  },
+  {
+    "id": "case-11-copywriting-over-budget",
+    "title": "Copywriting pushes a one-page site over budget",
+    "kind": "validation",
+    "brief": "One page, and please write the copy too. Budget 600 dollars.",
+    "input": {
+      "pages": 1,
+      "addon_codes": ["copywriting"],
+      "requested_features": ["landing_pages"],
+      "assets_ready": true,
+      "budget_minor": 60000,
+      "deadline": "2026-11-30",
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "feasible": false,
+      "total_minor": 65000,
+      "violation_codes": ["budget_exceeded"],
+      "missing_fields": []
+    }
+  },
+  {
+    "id": "case-12-revision-addon-fits",
+    "title": "Extra revision round still fits",
+    "kind": "validation",
+    "brief": "One page, plus one more revision round. Budget 600 dollars.",
+    "input": {
+      "pages": 1,
+      "addon_codes": ["extra_revision_round"],
+      "requested_features": ["landing_pages"],
+      "assets_ready": true,
+      "budget_minor": 60000,
+      "deadline": "2026-11-30",
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "feasible": true,
+      "total_minor": 55000,
+      "violation_codes": [],
+      "missing_fields": []
+    }
+  },
+  {
+    "id": "case-13-external-link-free",
+    "title": "External ordering link is included at no extra cost",
+    "kind": "validation",
+    "brief": "One page with a button to our Square ordering page.",
+    "input": {
+      "pages": 1,
+      "addon_codes": ["external_order_link"],
+      "requested_features": ["landing_pages", "external_order_link"],
+      "assets_ready": true,
+      "budget_minor": 50000,
+      "deadline": "2026-11-30",
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "feasible": true,
+      "total_minor": 50000,
+      "violation_codes": [],
+      "missing_fields": []
+    }
+  },
+  {
+    "id": "case-14-zero-pages",
+    "title": "No pages in scope",
+    "kind": "validation",
+    "brief": "We only need a logo refresh, no website pages.",
+    "input": {
+      "pages": 0,
+      "addon_codes": [],
+      "requested_features": [],
+      "assets_ready": true,
+      "budget_minor": 30000,
+      "deadline": "2026-11-30",
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "feasible": false,
+      "total_minor": 0,
+      "violation_codes": ["invalid_scope"],
+      "missing_fields": []
+    }
+  },
+  {
+    "id": "case-15-unknown-addon",
+    "title": "Add-on the price list does not contain",
+    "kind": "validation",
+    "brief": "One page plus an SEO audit please.",
+    "input": {
+      "pages": 1,
+      "addon_codes": ["seo_audit"],
+      "requested_features": ["landing_pages"],
+      "assets_ready": true,
+      "budget_minor": 90000,
+      "deadline": "2026-11-30",
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "feasible": false,
+      "total_minor": 50000,
+      "violation_codes": ["unknown_addon"],
+      "missing_fields": []
+    }
+  },
+  {
+    "id": "case-16-large-page-count",
+    "title": "Six pages at the top of the budget",
+    "kind": "validation",
+    "brief": "Six pages, budget exactly one thousand dollars.",
+    "input": {
+      "pages": 6,
+      "addon_codes": [],
+      "requested_features": ["landing_pages"],
+      "assets_ready": true,
+      "budget_minor": 100000,
+      "deadline": "2026-12-15",
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "feasible": true,
+      "total_minor": 100000,
+      "violation_codes": [],
+      "missing_fields": []
+    }
+  },
+  {
+    "id": "case-17-unsupported-and-over-budget",
+    "title": "Unsupported feature on top of a budget gap",
+    "kind": "validation",
+    "brief": "Three pages with payments built in, budget 500 dollars.",
+    "input": {
+      "pages": 3,
+      "addon_codes": [],
+      "requested_features": ["landing_pages", "on_site_ordering"],
+      "assets_ready": true,
+      "budget_minor": 50000,
+      "deadline": "2026-11-30",
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "feasible": false,
+      "total_minor": 70000,
+      "violation_codes": ["budget_exceeded", "capability_unavailable"],
+      "missing_fields": []
+    }
+  },
+  {
+    "id": "case-18-three-problems-at-once",
+    "title": "Budget, capability and timeline all fail together",
+    "kind": "validation",
+    "brief": "Three pages with online ordering, live on 5 November, no photos ready, budget 500.",
+    "input": {
+      "pages": 3,
+      "addon_codes": [],
+      "requested_features": ["landing_pages", "on_site_ordering"],
+      "assets_ready": false,
+      "budget_minor": 50000,
+      "deadline": "2026-11-05",
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "feasible": false,
+      "total_minor": 70000,
+      "violation_codes": ["budget_exceeded", "capability_unavailable", "deadline_conflict"],
+      "missing_fields": []
+    }
+  },
+  {
+    "id": "case-19-single-page-tight-deadline",
+    "title": "One page with assets ready and a workable date",
+    "kind": "validation",
+    "brief": "Just one page, everything is ready, live by 9 November.",
+    "input": {
+      "pages": 1,
+      "addon_codes": [],
+      "requested_features": ["landing_pages", "mobile_responsive"],
+      "assets_ready": true,
+      "budget_minor": 55000,
+      "deadline": "2026-11-09",
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "feasible": true,
+      "total_minor": 50000,
+      "violation_codes": [],
+      "missing_fields": []
+    }
+  },
+  {
+    "id": "case-20-change-request",
+    "title": "Client adds a contact form after the quote was drafted",
+    "kind": "flow",
+    "brief": "We also need a contact form and two more menu pages.",
+    "input": {
+      "pages": 1,
+      "addon_codes": [],
+      "requested_features": ["landing_pages"],
+      "assets_ready": true,
+      "budget_minor": 50000,
+      "deadline": "2026-11-30",
+      "today": "2026-10-30"
+    },
+    "expected": {
+      "new_revision": 2,
+      "open_quote_status": "SUPERSEDED",
+      "stale_write_status": 409
+    },
+    "covered_by": "backend/tests/test_api_quote_flow.py::test_new_revision_supersedes_the_open_draft"
+  }
+]

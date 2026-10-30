@@ -57,6 +57,10 @@ message after that creates a new revision and supersedes open drafts — never e
   read from the confirmed quote on the server; a lost capture response parks the attempt in
   `RECONCILING` until the original order is queried. A successful capture writes an immutable order
   snapshot in the same transaction as the `PAID` transition.
+- **Version diff** — when a quote is reissued, the new version shows what changed against the
+  previous one, line by line, with the total delta.
+- **Comparative evaluation** — 19 fixed cases run through both a one-shot "model quotes it" arm and
+  the facts-and-rules pipeline, with unparseable answers counted as failures.
 - **Local-first operation** — PostgreSQL in Docker, single operator account; the model and PayPal are
   the only external services, and the manual path works without the model.
 
@@ -67,6 +71,10 @@ out of scope for the hackathon build.
 | Payment on the client portal | Payment history in the console |
 | --- | --- |
 | ![Payment panel](docs/screenshots/09-payment-panel.png) | ![Payment history](docs/screenshots/10-payment-history.png) |
+
+| Version diff |
+| --- |
+| ![Quote diff](docs/screenshots/11-quote-diff.png) |
 
 | Model draft | Options it produced |
 | --- | --- |
@@ -245,7 +253,7 @@ Errors are always `{"code", "message", "details?"}` — no stack traces, SQL or 
 
 ```bash
 cd backend
-uv run pytest -q            # 50 tests
+uv run pytest -q            # 65 tests
 uv run ruff check .
 ```
 
@@ -262,8 +270,39 @@ uv run ruff check .
   snapshot, amount mismatch stays in `RECONCILING`, lost response recovered by reconcile, declined
   capture unlocks the quote, cross-tenant access returns 404.
 
-Fixture cases live in `evals/` with their expected verdicts; changing a rule means updating the case
-first, not loosening the assertion.
+Fixture cases live in `evals/cases.json` (20 cases, 19 of them rule-level) with their expected
+verdicts; changing a rule means updating the case first, not loosening the assertion.
+
+### Comparative evaluation
+
+```bash
+cd backend
+uv run python ../evals/run_eval.py --runs 3 --workers 1 --timeout 120 --pause 2
+```
+
+Two arms, same briefs, same published terms, same model:
+
+- **baseline** — one prompt asks the model for pages, add-ons, a total and a feasibility claim. The
+  claimed total is compared with what the rules would charge for the scope it named.
+- **pipeline** — the model returns the five facts, the server builds at most two options and prices
+  them.
+
+Reports land in `evals/reports/<timestamp>.{json,md}` with per-case verdicts, average and p95 latency,
+and token counts. Nothing in the report is estimated: failed calls are counted as failures.
+
+Latest recorded run (`evals/reports/20261030T132147Z.md`, 19 cases, one run each, sequential):
+
+| metric | baseline | pipeline |
+| --- | --- | --- |
+| usable answers | 5 / 19 | 7 / 19 |
+| claims the rules reject | 1 | 0 |
+| wrong or missing price | 0 of the parsed | n/a (server prices) |
+| average latency | 4.3 s | 3.7 s |
+
+The limiting factor in that run was **model compliance**, not safety: the gateway returned prose or
+its own schema for most short briefs, and those answers are counted as failures rather than repaired.
+Baseline still produced one quote that the rules reject while calling it feasible; the pipeline cannot
+do that because it never prices anything itself.
 
 ---
 

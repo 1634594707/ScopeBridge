@@ -9,6 +9,7 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
+from app.ai.client import ModelReply
 from app.ai.models import AiExtraction
 from app.core.config import get_settings
 from app.proposals.models import Proposal
@@ -68,7 +69,12 @@ def fake_model(monkeypatch):
         content = payload if isinstance(payload, str) else json.dumps(payload)
 
         def _complete(**_kwargs):
-            return content, 1234
+            return ModelReply(
+                content=content,
+                latency_ms=1234,
+                prompt_tokens=100,
+                completion_tokens=50,
+            )
 
         monkeypatch.setattr("app.ai.service.model_client.complete_json", _complete)
 

@@ -9,12 +9,21 @@ from __future__ import annotations
 
 import logging
 import time
+from dataclasses import dataclass
 
 import httpx
 
 from app.core.errors import ApiError
 
 logger = logging.getLogger("scopebridge.model")
+
+
+@dataclass(frozen=True)
+class ModelReply:
+    content: str
+    latency_ms: int
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
 
 
 def complete_json(
@@ -25,8 +34,8 @@ def complete_json(
     system_prompt: str,
     user_prompt: str,
     timeout_seconds: float,
-) -> tuple[str, int]:
-    """Return (raw content, latency in milliseconds)."""
+) -> ModelReply:
+    """Return the raw content, the latency and whatever usage the gateway reports."""
     body = {
         "model": model,
         "temperature": 0,
@@ -69,6 +78,7 @@ def complete_json(
     try:
         payload = response.json()
         content = payload["choices"][0]["message"]["content"]
+        usage = payload.get("usage") or {}
     except (ValueError, KeyError, IndexError, TypeError) as exc:
         raise ApiError(
             502,
@@ -83,4 +93,9 @@ def complete_json(
             "The model returned an empty answer. Price the scope by hand or retry.",
         )
 
-    return content, latency_ms
+    return ModelReply(
+        content=content,
+        latency_ms=latency_ms,
+        prompt_tokens=int(usage.get("prompt_tokens") or 0),
+        completion_tokens=int(usage.get("completion_tokens") or 0),
+    )

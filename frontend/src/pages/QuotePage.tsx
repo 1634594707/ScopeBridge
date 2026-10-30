@@ -6,6 +6,7 @@ import { formatDateTime, formatMoney } from "../lib/format";
 import { Button } from "../components/Button";
 import { Card } from "../components/Card";
 import { PageHeader } from "../components/PageHeader";
+import { QuoteDiff } from "../components/QuoteDiff";
 import { QuoteDocument } from "../components/QuoteDocument";
 import { RuleChip } from "../components/Tag";
 
@@ -20,6 +21,14 @@ export default function QuotePage() {
     enabled: Boolean(quote.data?.requirement_id),
   });
   const rules = useQuery({ queryKey: ["service-rules"], queryFn: api.serviceRules });
+  const siblings = useQuery({
+    queryKey: ["quotes", quote.data?.requirement_id],
+    queryFn: () => api.quotes(quote.data!.requirement_id),
+    enabled: Boolean(quote.data),
+  });
+  const previousQuote = siblings.data?.find(
+    (item) => item.quote_number === (quote.data?.quote_number ?? 0) - 1,
+  );
 
   const review = useMutation({
     mutationFn: () => api.reviewQuote(id),
@@ -117,6 +126,7 @@ export default function QuotePage() {
             clientBusiness={brief?.client_business}
             actions={action}
           />
+          {previousQuote && data ? <QuoteDiff current={data} previous={previousQuote} /> : null}
           {error ? <p className="text-[12px] text-flag-bad">{error.message}</p> : null}
         </div>
 

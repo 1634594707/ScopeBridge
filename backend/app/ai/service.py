@@ -53,7 +53,7 @@ def extract(db: Session, requirement: Requirement) -> ExtractionOut:
     rule_set = rules_service.to_rule_set(rule_row)
 
     try:
-        raw, latency_ms = model_client.complete_json(
+        reply = model_client.complete_json(
             model=settings.model_name,
             base_url=settings.model_base_url,
             api_key=settings.model_api_key,
@@ -70,6 +70,9 @@ def extract(db: Session, requirement: Requirement) -> ExtractionOut:
     except ApiError as exc:
         _record(db, requirement, "", None, "ERROR", exc.code, exc.message[:500], 0)
         raise
+
+    raw = reply.content
+    latency_ms = reply.latency_ms
 
     try:
         facts = ModelFacts.model_validate_json(raw)
