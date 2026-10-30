@@ -53,6 +53,16 @@ class PaymentAttempt(Base):
     approve_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
     error_detail: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # How many times the seller asked PayPal to re-create this order.
+    retry_count: Mapped[int] = mapped_column(Integer, default=0)
+    # Set when a seller closes an unrecoverable attempt by hand.
+    resolved_by: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    resolved_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    resolution_note: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

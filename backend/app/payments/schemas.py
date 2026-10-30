@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class PaymentOut(BaseModel):
@@ -18,8 +18,16 @@ class PaymentOut(BaseModel):
     paypal_order_id: str | None
     paypal_capture_id: str | None
     error_code: str | None
+    retry_count: int
+    resolved_at: datetime | None
+    resolution_note: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class ClosePaymentRequest(BaseModel):
+    note: str = Field(min_length=10, max_length=500)
+    confirmed_no_order: bool
 
 
 class SnapshotItemOut(BaseModel):

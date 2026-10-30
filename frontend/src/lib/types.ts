@@ -132,6 +132,9 @@ export interface Payment {
   paypal_order_id: string | null;
   paypal_capture_id: string | null;
   error_code: string | null;
+  retry_count: number;
+  resolved_at: string | null;
+  resolution_note: string | null;
   created_at: string;
   updated_at: string;
 }

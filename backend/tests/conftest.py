@@ -15,7 +15,9 @@ import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import text
 
-from app.core.config import get_settings
+os.environ.setdefault("ARGON2_MEMORY_COST", "8192")
+
+from app.core.config import get_settings  # noqa: E402
 
 _base = get_settings()
 _parts = urlsplit(_base.database_url)

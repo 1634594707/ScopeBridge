@@ -93,7 +93,7 @@ def test_server_builds_and_prices_two_options(
     body = response.json()
 
     assert body["model"] == get_settings().model_name
-    assert body["prompt_version"] == "facts-v6"
+    assert body["prompt_version"] == "facts-v7"
     assert body["unsupported_requests"] == ["on_site_ordering"]
     assert body["record"]["budget_minor"] == 50000
     assert body["source_message_ids"]

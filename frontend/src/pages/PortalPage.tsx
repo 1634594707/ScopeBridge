@@ -7,7 +7,7 @@ import { readPortalToken, rememberPortalToken } from "../lib/customerToken";
 import { formatDeadline, formatMoney } from "../lib/format";
 import { Button } from "../components/Button";
 import { Card, CardHeader } from "../components/Card";
-import { Field, TextArea } from "../components/Field";
+import { Field, Input, TextArea } from "../components/Field";
 import { MessageTimeline } from "../components/MessageTimeline";
 import { Money } from "../components/Money";
 import { PaymentPanel } from "../components/PaymentPanel";
@@ -55,10 +55,20 @@ export default function PortalPage() {
     },
   });
 
+  const [budget, setBudget] = useState("");
+  const [deadline, setDeadline] = useState("");
+  const [assets, setAssets] = useState<"keep" | "ready" | "pending">("keep");
+  const [changeSaved, setChangeSaved] = useState<number | null>(null);
+
   const requestChange = useMutation({
     mutationFn: api.portalMessage,
-    onSuccess: () => {
+    onSuccess: (message) => {
+      setChangeSaved(message.revision);
+      setFormError("");
       setChangeNote("");
+      setBudget("");
+      setDeadline("");
+      setAssets("keep");
       queryClient.invalidateQueries({ queryKey: ["portal", storedToken] });
     },
   });
@@ -76,13 +86,33 @@ export default function PortalPage() {
 
   const submitChange = (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (changeNote.trim().length < 5) {
+    const note = changeNote.trim();
+    if (note.length < 5) {
       setFormError("Describe the change in a sentence.");
       return;
     }
+    const budgetValue = budget === "" ? undefined : Math.round(Number(budget) * 100);
+    if (budgetValue !== undefined && (Number.isNaN(budgetValue) || budgetValue < 0)) {
+      setFormError("Enter the new budget as a number, or leave it empty.");
+      return;
+    }
     setFormError("");
-    requestChange.mutate({ body: changeNote.trim(), expected_revision: currentRevision });
+    setChangeSaved(null);
+    requestChange.mutate({
+      body: note,
+      expected_revision: currentRevision,
+      budget_minor: budgetValue,
+      deadline: deadline === "" ? undefined : deadline,
+      assets_ready: assets === "keep" ? undefined : assets === "ready",
+    });
   };
+
+  const changeError = requestChange.error instanceof ApiError ? requestChange.error : null;
+  const changeErrorMessage = changeError
+    ? changeError.code === "revision_conflict"
+      ? "This brief changed while you were writing. Reload to see the latest revision — your text is still here."
+      : changeError.message
+    : "";
 
   if (portal.isLoading) {
     return (
@@ -296,6 +326,80 @@ export default function PortalPage() {
                   rows={4}
                 />
               </Field>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field
+                  label="New budget (USD)"
+                  htmlFor="portal-budget"
+                  hint="Leave empty to keep the current budget."
+                >
+                  <Input
+                    id="portal-budget"
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={budget}
+                    onChange={(event) => setBudget(event.target.value)}
+                    placeholder={
+                      requirement.budget_minor === null
+                        ? "500"
+                        : String(requirement.budget_minor / 100)
+                    }
+                  />
+                </Field>
+                <Field
+                  label="New go-live date"
+                  htmlFor="portal-deadline"
+                  hint="Leave empty to keep the current date."
+                >
+                  <Input
+                    id="portal-deadline"
+                    type="date"
+                    value={deadline}
+                    onChange={(event) => setDeadline(event.target.value)}
+                  />
+                </Field>
+              </div>
+
+              <fieldset className="flex flex-col gap-2">
+                <legend className="label">Materials</legend>
+                <div className="flex flex-wrap gap-2">
+                  {(
+                    [
+                      ["keep", "No change"],
+                      ["ready", "Photos and copy are ready"],
+                      ["pending", "Still gathering"],
+                    ] as const
+                  ).map(([value, text]) => (
+                    <button
+                      key={value}
+                      type="button"
+                      aria-pressed={assets === value}
+                      onClick={() => setAssets(value)}
+                      className={
+                        assets === value
+                          ? "rounded-sm border border-pine bg-pine-wash px-2.5 py-1.5 text-[12px] text-pine-deep"
+                          : "rounded-sm border border-line bg-paper-card px-2.5 py-1.5 text-[12px] text-ink-muted hover:border-ink/25 hover:text-ink"
+                      }
+                    >
+                      {text}
+                    </button>
+                  ))}
+                </div>
+              </fieldset>
+
+              {changeErrorMessage ? (
+                <p className="rounded-md border border-flag-bad/30 bg-flag-bad/5 px-3 py-2 text-[12px] leading-relaxed text-flag-bad">
+                  {changeErrorMessage}
+                </p>
+              ) : null}
+              {changeSaved !== null ? (
+                <p className="rounded-md border border-flag-good/30 bg-flag-good/5 px-3 py-2 text-[12px] leading-relaxed text-flag-good">
+                  Saved as revision {changeSaved}. The studio sees the new budget, date and material
+                  state before pricing again.
+                </p>
+              ) : null}
+
               <Button
                 type="submit"
                 variant="secondary"

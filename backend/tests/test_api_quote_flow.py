@@ -139,6 +139,34 @@ def test_full_manual_quote_flow(client: TestClient, seller, rules) -> None:
     assert seller_view.json()["confirmed_at"] is not None
 
 
+def test_structured_change_updates_the_recorded_budget(
+    client: TestClient, seller, rules
+) -> None:
+    headers = _sign_in(client)
+    requirement_id, portal_headers = _intake(client)
+
+    response = client.post(
+        "/api/portal/messages",
+        json={
+            "body": "The owner approved a bigger budget: 800 dollars.",
+            "expected_revision": 1,
+            "budget_minor": 80000,
+            "assets_ready": True,
+        },
+        headers=portal_headers,
+    )
+    assert response.status_code == 201, response.text
+    assert response.json()["revision"] == 2
+    assert response.json()["budget_minor"] == 80000
+
+    view = client.get("/api/portal", headers=portal_headers).json()
+    assert view["requirement"]["budget_minor"] == 80000
+
+    repriced = _proposal(client, requirement_id, headers, label="Three pages", pages=3)
+    assert repriced["feasible"] is True
+    assert repriced["total_minor"] == 70000
+
+
 def test_new_revision_supersedes_the_open_draft(client: TestClient, seller, rules) -> None:
     headers = _sign_in(client)
     requirement_id, portal_headers = _intake(client)

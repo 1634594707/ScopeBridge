@@ -10,7 +10,12 @@ from sqlalchemy.orm import Session
 from app.api.deps import SellerAuth, require_csrf, require_customer, require_seller
 from app.core.db import get_db
 from app.payments import service
-from app.payments.schemas import PaymentOut, SnapshotEnvelope, SnapshotOut
+from app.payments.schemas import (
+    ClosePaymentRequest,
+    PaymentOut,
+    SnapshotEnvelope,
+    SnapshotOut,
+)
 from app.requirements.models import Requirement
 from app.requirements.service import load_for_seller
 
@@ -57,6 +62,33 @@ def reconcile_payment(
     db: Session = Depends(get_db),
 ) -> PaymentOut:
     attempt = service.reconcile_payment(db, payment_id, auth.user.id)
+    return service.serialize_attempt(attempt)
+
+
+@router.post("/payments/{payment_id}/retry-create", response_model=PaymentOut)
+def retry_create_order(
+    payment_id: UUID,
+    auth: SellerAuth = Depends(require_csrf),
+    db: Session = Depends(get_db),
+) -> PaymentOut:
+    attempt = service.retry_create(db, payment_id, auth.user.id)
+    return service.serialize_attempt(attempt)
+
+
+@router.post("/payments/{payment_id}/close", response_model=PaymentOut)
+def close_payment(
+    payment_id: UUID,
+    payload: ClosePaymentRequest,
+    auth: SellerAuth = Depends(require_csrf),
+    db: Session = Depends(get_db),
+) -> PaymentOut:
+    attempt = service.close_attempt(
+        db,
+        payment_id,
+        auth.user.id,
+        note=payload.note,
+        confirmed_no_order=payload.confirmed_no_order,
+    )
     return service.serialize_attempt(attempt)
 
 

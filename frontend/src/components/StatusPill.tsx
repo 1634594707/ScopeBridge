@@ -13,6 +13,7 @@ const styles: Record<string, string> = {
   RECONCILING: "border-flag-warn/40 bg-flag-warn/15 text-flag-warn",
   COMPLETED: "border-flag-good/30 bg-flag-good/10 text-flag-good",
   FAILED: "border-flag-bad/30 bg-flag-bad/5 text-flag-bad",
+  ABANDONED: "border-line bg-transparent text-ink-faint line-through decoration-1",
 };
 
 const labels: Record<string, string> = {
@@ -28,6 +29,7 @@ const labels: Record<string, string> = {
   RECONCILING: "Verifying",
   COMPLETED: "Completed",
   FAILED: "Failed",
+  ABANDONED: "Closed by hand",
 };
 
 export function StatusPill({ status, className }: { status: string; className?: string }) {

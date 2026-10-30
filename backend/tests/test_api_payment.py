@@ -377,3 +377,128 @@ def test_unknown_payment_returns_404(client: TestClient, seller, rules, fake_pay
     headers = _sign_in(client)
     response = client.post(f"/api/payments/{uuid4()}/reconcile", headers=headers)
     assert response.status_code == 404
+
+
+def _attempt_with_unknown_create(
+    client: TestClient, portal: dict[str, str], quote_id: str, key: str, fake_paypal: dict
+) -> dict:
+    fake_paypal["create_error"] = paypal.PayPalTransportError("ReadTimeout")
+    response = client.post(
+        f"/api/portal/quotes/{quote_id}/payment-attempts",
+        headers={**portal, "Idempotency-Key": key},
+    )
+    assert response.status_code == 200, response.text
+    return response.json()
+
+
+def test_reconcile_without_order_id_is_rejected(
+    client: TestClient, seller, rules, fake_paypal
+) -> None:
+    _, portal, quote_id = _confirmed_quote(client)
+    attempt = _attempt_with_unknown_create(client, portal, quote_id, "recover-key-1", fake_paypal)
+    assert attempt["status"] == "RECONCILING"
+    assert attempt["paypal_order_id"] is None
+
+    headers = _sign_in(client)
+    response = client.post(f"/api/payments/{attempt['id']}/reconcile", headers=headers)
+    assert response.status_code == 409
+    assert response.json()["code"] == "no_order_id"
+
+
+def test_retry_create_recovers_the_missing_order(
+    client: TestClient, seller, rules, fake_paypal
+) -> None:
+    _, portal, quote_id = _confirmed_quote(client)
+    attempt = _attempt_with_unknown_create(client, portal, quote_id, "recover-key-2", fake_paypal)
+
+    fake_paypal["create_error"] = None
+    headers = _sign_in(client)
+    response = client.post(f"/api/payments/{attempt['id']}/retry-create", headers=headers)
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["status"] == "AWAITING_APPROVAL"
+    assert body["paypal_order_id"].startswith(ORDER_ID)
+    assert body["retry_count"] == 1
+
+    view = client.get("/api/portal", headers=portal).json()
+    assert view["quotes"][0]["status"] == "PAYMENT_LOCKED"
+
+
+def test_retry_create_is_bounded(client: TestClient, seller, rules, fake_paypal) -> None:
+    _, portal, quote_id = _confirmed_quote(client)
+    attempt = _attempt_with_unknown_create(client, portal, quote_id, "recover-key-3", fake_paypal)
+    headers = _sign_in(client)
+
+    for expected in (1, 2):
+        response = client.post(f"/api/payments/{attempt['id']}/retry-create", headers=headers)
+        assert response.status_code == 200, response.text
+        assert response.json()["retry_count"] == expected
+        assert response.json()["status"] == "RECONCILING"
+
+    blocked = client.post(f"/api/payments/{attempt['id']}/retry-create", headers=headers)
+    assert blocked.status_code == 409
+    assert blocked.json()["code"] == "retry_limit"
+
+
+def test_close_requires_confirmation_and_a_note(
+    client: TestClient, seller, rules, fake_paypal
+) -> None:
+    _, portal, quote_id = _confirmed_quote(client)
+    attempt = _attempt_with_unknown_create(client, portal, quote_id, "recover-key-4", fake_paypal)
+    headers = _sign_in(client)
+    path = f"/api/payments/{attempt['id']}/close"
+
+    unconfirmed = client.post(
+        path,
+        json={"note": "Checked PayPal activity list: no order.", "confirmed_no_order": False},
+        headers=headers,
+    )
+    assert unconfirmed.status_code == 422
+    assert unconfirmed.json()["code"] == "confirmation_required"
+
+    # Whitespace passes the schema's length check but not the semantic one.
+    short_note = client.post(
+        path, json={"note": "            ", "confirmed_no_order": True}, headers=headers
+    )
+    assert short_note.status_code == 422
+    assert short_note.json()["code"] == "note_required"
+
+
+def test_close_unlocks_the_quote_and_keeps_a_trail(
+    client: TestClient, seller, rules, fake_paypal
+) -> None:
+    _, portal, quote_id = _confirmed_quote(client)
+    attempt = _attempt_with_unknown_create(client, portal, quote_id, "recover-key-5", fake_paypal)
+    headers = _sign_in(client)
+
+    closed = client.post(
+        f"/api/payments/{attempt['id']}/close",
+        json={
+            "note": "Checked PayPal activity: no order was created for this quote.",
+            "confirmed_no_order": True,
+        },
+        headers=headers,
+    )
+    assert closed.status_code == 200, closed.text
+    body = closed.json()
+    assert body["status"] == "ABANDONED"
+    assert body["resolution_note"].startswith("Checked PayPal")
+    assert body["resolved_at"] is not None
+
+    view = client.get("/api/portal", headers=portal).json()
+    assert view["quotes"][0]["status"] == "CONFIRMED"
+
+
+def test_retry_rejected_when_paypal_already_returned_an_order(
+    client: TestClient, seller, rules, fake_paypal
+) -> None:
+    _, portal, quote_id = _confirmed_quote(client)
+    attempt = client.post(
+        f"/api/portal/quotes/{quote_id}/payment-attempts",
+        headers={**portal, "Idempotency-Key": "recover-key-6"},
+    ).json()
+
+    headers = _sign_in(client)
+    response = client.post(f"/api/payments/{attempt['id']}/retry-create", headers=headers)
+    assert response.status_code == 409
+    assert response.json()["code"] == "order_already_exists"

@@ -1,14 +1,20 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, RotateCcw, XCircle } from "lucide-react";
 import { api, ApiError } from "../lib/api";
 import { formatDateTime, formatMoney } from "../lib/format";
 import { Button } from "./Button";
 import { Card } from "./Card";
+import { Field, TextArea } from "./Field";
 import { Money } from "./Money";
 import { StatusPill } from "./StatusPill";
 
 export function PaymentHistory({ requirementId }: { requirementId: string }) {
   const queryClient = useQueryClient();
+  const [closingId, setClosingId] = useState<string | null>(null);
+  const [note, setNote] = useState("");
+  const [error, setError] = useState("");
+
   const payments = useQuery({
     queryKey: ["payments", requirementId],
     queryFn: () => api.requirementPayments(requirementId),
@@ -18,18 +24,42 @@ export function PaymentHistory({ requirementId }: { requirementId: string }) {
     queryFn: () => api.requirementOrder(requirementId),
   });
 
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["payments", requirementId] });
+    queryClient.invalidateQueries({ queryKey: ["order", requirementId] });
+    queryClient.invalidateQueries({ queryKey: ["quotes", requirementId] });
+  };
+
   const reconcile = useMutation({
     mutationFn: (paymentId: string) => api.reconcilePayment(paymentId),
+    onSuccess: refresh,
+  });
+  const retry = useMutation({
+    mutationFn: (paymentId: string) => api.retryCreatePayment(paymentId),
+    onSuccess: refresh,
+  });
+  const close = useMutation({
+    mutationFn: (paymentId: string) => api.closePayment(paymentId, note.trim()),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["payments", requirementId] });
-      queryClient.invalidateQueries({ queryKey: ["order", requirementId] });
-      queryClient.invalidateQueries({ queryKey: ["quotes", requirementId] });
+      setClosingId(null);
+      setNote("");
+      setError("");
+      refresh();
+    },
+    onError: (cause) => {
+      setError(cause instanceof ApiError ? cause.message : "The attempt could not be closed.");
     },
   });
 
   const rows = payments.data ?? [];
-  const error = reconcile.error instanceof ApiError ? reconcile.error.message : "";
   const snapshot = order.data?.order ?? null;
+  const busy = reconcile.isPending || retry.isPending || close.isPending;
+
+  const startClosing = (paymentId: string) => {
+    setClosingId(paymentId);
+    setNote("");
+    setError("");
+  };
 
   return (
     <Card className="overflow-hidden">
@@ -45,36 +75,108 @@ export function PaymentHistory({ requirementId }: { requirementId: string }) {
         </p>
       ) : (
         <ul className="divide-y divide-line">
-          {rows.map((payment) => (
-            <li key={payment.id} className="flex flex-col gap-2 px-5 py-3">
-              <div className="flex items-center justify-between gap-4">
-                <span className="font-mono text-[11px] text-ink-faint">
-                  {payment.paypal_order_id ?? "order pending"}
-                </span>
-                <span className="flex items-center gap-3">
-                  <Money amountMinor={payment.amount_minor} size="sm" tone="muted" />
-                  <StatusPill status={payment.status} />
-                </span>
-              </div>
-              <div className="flex items-center justify-between gap-3">
-                <span className="text-[11px] text-ink-faint">
-                  started {formatDateTime(payment.created_at)}
-                  {payment.error_code ? ` · ${payment.error_code}` : ""}
-                </span>
-                {payment.status === "RECONCILING" ? (
-                  <Button
-                    size="sm"
-                    variant="secondary"
-                    busy={reconcile.isPending}
-                    icon={<RefreshCw size={13} />}
-                    onClick={() => reconcile.mutate(payment.id)}
-                  >
-                    Verify with PayPal
-                  </Button>
+          {rows.map((payment) => {
+            const needsRetry = payment.status === "RECONCILING" && !payment.paypal_order_id;
+            const canClose = ["RECONCILING", "FAILED"].includes(payment.status);
+            return (
+              <li key={payment.id} className="flex flex-col gap-2 px-5 py-3">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="font-mono text-[11px] text-ink-faint">
+                    {payment.paypal_order_id ?? "order pending"}
+                  </span>
+                  <span className="flex items-center gap-3">
+                    <Money amountMinor={payment.amount_minor} size="sm" tone="muted" />
+                    <StatusPill status={payment.status} />
+                  </span>
+                </div>
+
+                <div className="flex items-start justify-between gap-3">
+                  <span className="text-[11px] leading-relaxed text-ink-faint">
+                    started {formatDateTime(payment.created_at)}
+                    {payment.error_code ? ` · ${payment.error_code}` : ""}
+                    {payment.retry_count > 0 ? ` · retried ${payment.retry_count}x` : ""}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-2">
+                    {needsRetry ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        busy={retry.isPending}
+                        icon={<RotateCcw size={13} />}
+                        onClick={() => retry.mutate(payment.id)}
+                      >
+                        Retry create
+                      </Button>
+                    ) : null}
+                    {payment.status === "RECONCILING" && payment.paypal_order_id ? (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        busy={reconcile.isPending}
+                        icon={<RefreshCw size={13} />}
+                        onClick={() => reconcile.mutate(payment.id)}
+                      >
+                        Verify with PayPal
+                      </Button>
+                    ) : null}
+                    {canClose ? (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        icon={<XCircle size={13} />}
+                        onClick={() => startClosing(payment.id)}
+                      >
+                        Close
+                      </Button>
+                    ) : null}
+                  </span>
+                </div>
+
+                {payment.resolution_note ? (
+                  <p className="text-[11px] leading-relaxed text-ink-faint">
+                    closed by hand · {payment.resolution_note}
+                  </p>
                 ) : null}
-              </div>
-            </li>
-          ))}
+
+                {closingId === payment.id ? (
+                  <div className="flex flex-col gap-2 rounded-md border border-line bg-paper px-3 py-3">
+                    <p className="text-[11px] leading-relaxed text-ink-muted">
+                      Only close this attempt after checking the PayPal sandbox dashboard and
+                      confirming no order was created. The quote unlocks; nothing is refunded
+                      because nothing was charged.
+                    </p>
+                    <Field
+                      label="What did you check?"
+                      htmlFor={`close-note-${payment.id}`}
+                      error={error}
+                    >
+                      <TextArea
+                        id={`close-note-${payment.id}`}
+                        value={note}
+                        rows={3}
+                        placeholder="Checked PayPal activity for 30 Oct: no order for quote v2."
+                        onChange={(event) => setNote(event.target.value)}
+                      />
+                    </Field>
+                    <div className="flex items-center justify-between gap-3">
+                      <Button
+                        size="sm"
+                        variant="danger"
+                        busy={close.isPending}
+                        disabled={note.trim().length < 10}
+                        onClick={() => close.mutate(payment.id)}
+                      >
+                        Close attempt and unlock quote
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={() => setClosingId(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       )}
 
@@ -93,8 +195,6 @@ export function PaymentHistory({ requirementId }: { requirementId: string }) {
           </dl>
         </div>
       ) : null}
-
-      {error ? <p className="px-5 py-3 text-[12px] text-flag-bad">{error}</p> : null}
     </Card>
   );
 }

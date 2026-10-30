@@ -4,6 +4,7 @@ import type {
   Extraction,
   ExtractionEnvelope,
   IntakeResponse,
+  Message,
   OrderSnapshot,
   Payment,
   PortalView,
@@ -137,8 +138,13 @@ export const api = {
 
   portal: () => request<PortalView>("/portal", { customer: true }),
 
-  portalMessage: (payload: { body: string; expected_revision: number }) =>
-    request("/portal/messages", { method: "POST", body: payload, customer: true }),
+  portalMessage: (payload: {
+    body: string;
+    expected_revision: number;
+    budget_minor?: number;
+    deadline?: string;
+    assets_ready?: boolean;
+  }) => request<Message>("/portal/messages", { method: "POST", body: payload, customer: true }),
 
   selectProposal: (id: string) =>
     request<Proposal>(`/portal/proposals/${id}/select`, { method: "POST", customer: true }),
@@ -160,6 +166,15 @@ export const api = {
 
   reconcilePayment: (id: string) =>
     request<Payment>(`/payments/${id}/reconcile`, { method: "POST" }),
+
+  retryCreatePayment: (id: string) =>
+    request<Payment>(`/payments/${id}/retry-create`, { method: "POST" }),
+
+  closePayment: (id: string, note: string) =>
+    request<Payment>(`/payments/${id}/close`, {
+      method: "POST",
+      body: { note, confirmed_no_order: true },
+    }),
 
   requirementPayments: (id: string) =>
     request<Payment[]>(`/requirements/${id}/payments`),

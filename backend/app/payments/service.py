@@ -21,13 +21,15 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
-from app.core.errors import ApiError, conflict, not_found
+from app.core.errors import ApiError, conflict, not_found, unprocessable
 from app.payments.models import ACTIVE_STATUSES, OrderSnapshot, PaymentAttempt
 from app.payments.schemas import PaymentOut, SnapshotItemOut, SnapshotOut
 from app.paypal import client as paypal
 from app.quotes.models import QuoteVersion
 from app.quotes.states import QuoteAction, QuoteStatus, transition
 from app.requirements.models import Requirement
+
+MAX_CREATE_RETRIES = 2
 
 
 def start_payment(
@@ -79,6 +81,102 @@ def start_payment(
     db.commit()
     db.refresh(attempt)
 
+    return _create_with_paypal(db, attempt, quote)
+
+
+def retry_create(db: Session, payment_id: UUID, seller_id: UUID) -> PaymentAttempt:
+    """Ask PayPal to create the order again with the same request id.
+
+    Used when the first create call never returned an order id. PayPal dedupes
+    on `PayPal-Request-Id`, so a retry either returns the original order or
+    creates the one that never happened. Bounded: after `MAX_CREATE_RETRIES`
+    the seller has to check PayPal and close the attempt explicitly.
+    """
+    attempt = _load_for_seller(db, payment_id, seller_id)
+    if attempt.paypal_order_id:
+        raise conflict(
+            "order_already_exists",
+            "PayPal already returned an order id for this attempt; reconcile instead of retrying.",
+        )
+    if attempt.status not in {"RECONCILING", "CREATING"}:
+        raise conflict(
+            "not_recoverable",
+            "Only an attempt with an unknown create result can be retried.",
+            {"status": attempt.status},
+        )
+    if attempt.retry_count >= MAX_CREATE_RETRIES:
+        raise conflict(
+            "retry_limit",
+            f"This attempt was already retried {MAX_CREATE_RETRIES} times. "
+            "Check PayPal, then close it with a note.",
+        )
+    quote = db.get(QuoteVersion, attempt.quote_version_id)
+    if quote is None:
+        raise not_found("Quote not found")
+
+    attempt.retry_count += 1
+    attempt.status = "CREATING"
+    attempt.error_code = None
+    db.commit()
+    db.refresh(attempt)
+    return _create_with_paypal(db, attempt, quote)
+
+
+def close_attempt(
+    db: Session,
+    payment_id: UUID,
+    seller_id: UUID,
+    note: str,
+    confirmed_no_order: bool,
+) -> PaymentAttempt:
+    """Close an attempt that can never be verified, after a human check.
+
+    This is the only path that unlocks a quote without a PayPal-verified
+    outcome, so it demands an explicit acknowledgement and a written note.
+    """
+    attempt = _load_for_seller(db, payment_id, seller_id)
+    if attempt.status not in {"RECONCILING", "FAILED"}:
+        raise conflict(
+            "not_closable",
+            "Only an unresolved or failed attempt can be closed.",
+            {"status": attempt.status},
+        )
+    if attempt.paypal_capture_id:
+        raise conflict(
+            "capture_exists",
+            "A capture is recorded for this attempt; it cannot be closed as unpaid.",
+        )
+    if not confirmed_no_order:
+        raise unprocessable(
+            "confirmation_required",
+            "Confirm that you checked the PayPal dashboard before closing this attempt.",
+        )
+    cleaned = note.strip()
+    if len(cleaned) < 10:
+        raise unprocessable(
+            "note_required",
+            "Write what you checked in PayPal (at least 10 characters).",
+        )
+
+    quote = db.get(QuoteVersion, attempt.quote_version_id)
+    if quote is not None and quote.status == QuoteStatus.PAID:
+        raise conflict("already_paid", "This quote is already paid.")
+
+    attempt.status = "ABANDONED"
+    attempt.resolved_by = seller_id
+    attempt.resolved_at = datetime.now(UTC)
+    attempt.resolution_note = cleaned[:500]
+    attempt.error_code = attempt.error_code or "closed_without_order"
+    db.commit()
+    db.refresh(attempt)
+    if quote is not None:
+        _unlock(db, quote)
+    return attempt
+
+
+def _create_with_paypal(
+    db: Session, attempt: PaymentAttempt, quote: QuoteVersion
+) -> PaymentAttempt:
     settings = get_settings()
     base = settings.app_base_url.rstrip("/")
     try:
@@ -146,18 +244,19 @@ def capture_payment(
 
 
 def reconcile_payment(db: Session, payment_id: UUID, seller_id: UUID) -> PaymentAttempt:
-    attempt = db.get(PaymentAttempt, payment_id)
-    if attempt is None:
-        raise not_found("Payment not found")
-    requirement = db.get(Requirement, attempt.requirement_id)
-    if requirement is None or requirement.seller_id != seller_id:
-        raise not_found("Payment not found")
-    return reconcile(db, attempt)
+    return reconcile(db, _load_for_seller(db, payment_id, seller_id))
 
 
 def reconcile(db: Session, attempt: PaymentAttempt) -> PaymentAttempt:
-    if attempt.status == "COMPLETED" or not attempt.paypal_order_id:
+    if attempt.status == "COMPLETED":
         return attempt
+    if not attempt.paypal_order_id:
+        raise conflict(
+            "no_order_id",
+            "This attempt never received a PayPal order id, so there is nothing to query. "
+            "Retry the create call, or close the attempt after checking PayPal.",
+            {"retry_count": attempt.retry_count},
+        )
     quote = db.get(QuoteVersion, attempt.quote_version_id)
     if quote is None:
         raise not_found("Quote not found")
@@ -229,6 +328,9 @@ def serialize_attempt(attempt: PaymentAttempt) -> PaymentOut:
         paypal_order_id=attempt.paypal_order_id,
         paypal_capture_id=attempt.paypal_capture_id,
         error_code=attempt.error_code,
+        retry_count=attempt.retry_count,
+        resolved_at=attempt.resolved_at,
+        resolution_note=attempt.resolution_note,
         created_at=attempt.created_at,
         updated_at=attempt.updated_at,
     )
@@ -253,6 +355,16 @@ def load_for_requirement(
     db: Session, requirement: Requirement, payment_id: UUID
 ) -> PaymentAttempt:
     return _load(db, requirement, payment_id)
+
+
+def _load_for_seller(db: Session, payment_id: UUID, seller_id: UUID) -> PaymentAttempt:
+    attempt = db.get(PaymentAttempt, payment_id)
+    if attempt is None:
+        raise not_found("Payment not found")
+    requirement = db.get(Requirement, attempt.requirement_id)
+    if requirement is None or requirement.seller_id != seller_id:
+        raise not_found("Payment not found")
+    return attempt
 
 
 def _load(db: Session, requirement: Requirement, payment_id: UUID) -> PaymentAttempt:

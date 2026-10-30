@@ -1,0 +1,980 @@
+{
+  "generated_at": "2026-10-30T15:10:55.177708+00:00",
+  "model": "deepseek-v4.1-flash",
+  "prompt_version": "facts-v7",
+  "metrics_version": "v2",
+  "rule_version": 1,
+  "runs_per_case": 1,
+  "workers": 1,
+  "timeout_seconds": 90.0,
+  "pause_seconds": 1.0,
+  "tag": "facts-v7-inline-both",
+  "cases": 19,
+  "summary": {
+    "baseline": {
+      "calls": 19,
+      "parsed": 18,
+      "parse_rate": 0.947,
+      "transport_failures": 1,
+      "content_failures": 0,
+      "avg_latency_ms": 4337,
+      "p95_latency_ms": 6015,
+      "prompt_tokens": 5775,
+      "completion_tokens": 4181,
+      "price_mismatch": 0,
+      "false_promises": 2,
+      "unknown_addons": 0,
+      "unsafe_releases": 2,
+      "unsafe_rate_of_parsed": 0.111,
+      "unsafe_rate_of_calls": 0.105
+    },
+    "pipeline": {
+      "calls": 19,
+      "parsed": 19,
+      "parse_rate": 1.0,
+      "transport_failures": 0,
+      "content_failures": 0,
+      "avg_latency_ms": 4340,
+      "p95_latency_ms": 7040,
+      "prompt_tokens": 8523,
+      "completion_tokens": 4534,
+      "options_total": 27,
+      "invariant_violations": 0,
+      "original_satisfied": 6,
+      "narrowed_available": 6,
+      "no_solution_honest": 7,
+      "deliverable_option_rate_of_calls": 0.632
+    }
+  },
+  "rows": [
+    {
+      "arm": "baseline",
+      "case": "case-01-missing-both",
+      "latency_ms": 4883,
+      "prompt_tokens": 281,
+      "completion_tokens": 97,
+      "raw_head": "{\"pages\": 1, \"addon_codes\": [], \"total_usd\": 500, \"feasible\": true, \"rationale\": \"A single-page modern bakery site with opening hours fits the first-page base price of 500 USD. No add-ons are required",
+      "parsed": true,
+      "pages": 1,
+      "addons": [],
+      "total_usd": 500.0,
+      "claimed_feasible": true,
+      "rule_total_minor": 50000,
+      "rule_feasible": false,
+      "price_mismatch": false,
+      "false_promise": true,
+      "unknown_addons": [],
+      "unsafe": true
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-01-missing-both",
+      "latency_ms": 5420,
+      "prompt_tokens": 541,
+      "completion_tokens": 313,
+      "raw_head": "{\"pages\": null, \"budget_usd\": null, \"deadline_days\": null, \"assets_ready\": true, \"features\": [\"landing_pages\"]}",
+      "parsed": true,
+      "options": 1,
+      "feasible_options": 0,
+      "options_detail": [
+        {
+          "label": "As briefed",
+          "pages": 1,
+          "addon_codes": [],
+          "requested_features": [
+            "landing_pages"
+          ],
+          "feasible": false,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        }
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-02-missing-budget",
+      "parsed": false,
+      "failure_class": "transport",
+      "error": "model_unavailable: The model endpoint could not be reached. Price the scope by hand or retry.",
+      "latency_ms": 0,
+      "prompt_tokens": 0,
+      "completion_tokens": 0
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-02-missing-budget",
+      "latency_ms": 4061,
+      "prompt_tokens": 545,
+      "completion_tokens": 226,
+      "raw_head": "{\"pages\": 1, \"budget_usd\": null, \"deadline_days\": 31, \"assets_ready\": true, \"features\": [\"landing_pages\"]}",
+      "parsed": true,
+      "options": 1,
+      "feasible_options": 0,
+      "options_detail": [
+        {
+          "label": "As briefed",
+          "pages": 1,
+          "addon_codes": [],
+          "requested_features": [
+            "landing_pages"
+          ],
+          "feasible": false,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        }
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-03-missing-deadline",
+      "latency_ms": 4215,
+      "prompt_tokens": 277,
+      "completion_tokens": 68,
+      "raw_head": "{\"pages\": 1, \"addon_codes\": [], \"total_usd\": 500, \"feasible\": true, \"rationale\": \"Single landing page costs 500 USD, within the 600 USD budget. No add-ons requested or needed. Materials are ready, and",
+      "parsed": true,
+      "pages": 1,
+      "addons": [],
+      "total_usd": 500.0,
+      "claimed_feasible": true,
+      "rule_total_minor": 50000,
+      "rule_feasible": false,
+      "price_mismatch": false,
+      "false_promise": true,
+      "unknown_addons": [],
+      "unsafe": true
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-03-missing-deadline",
+      "latency_ms": 3267,
+      "prompt_tokens": 327,
+      "completion_tokens": 40,
+      "raw_head": "{\"pages\": 1, \"budget_usd\": 600, \"deadline_days\": null, \"assets_ready\": true, \"features\": [\"landing_pages\"]}",
+      "parsed": true,
+      "options": 1,
+      "feasible_options": 0,
+      "options_detail": [
+        {
+          "label": "As briefed",
+          "pages": 1,
+          "addon_codes": [],
+          "requested_features": [
+            "landing_pages"
+          ],
+          "feasible": false,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        }
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-04-budget-gap",
+      "latency_ms": 3487,
+      "prompt_tokens": 282,
+      "completion_tokens": 85,
+      "raw_head": "{\"pages\": 3, \"addon_codes\": [], \"total_usd\": 700.0, \"feasible\": false, \"rationale\": \"Three pages cost 500 for the first page plus 100 each for two extra pages, totaling 700 USD, which exceeds the 500 ",
+      "parsed": true,
+      "pages": 3,
+      "addons": [],
+      "total_usd": 700.0,
+      "claimed_feasible": false,
+      "rule_total_minor": 70000,
+      "rule_feasible": false,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-04-budget-gap",
+      "latency_ms": 3098,
+      "prompt_tokens": 336,
+      "completion_tokens": 41,
+      "raw_head": "{\"pages\": 3, \"budget_usd\": 500, \"deadline_days\": 31, \"assets_ready\": true, \"features\": [\"landing_pages\"]}",
+      "parsed": true,
+      "options": 2,
+      "feasible_options": 1,
+      "options_detail": [
+        {
+          "label": "As briefed",
+          "pages": 3,
+          "addon_codes": [],
+          "requested_features": [
+            "landing_pages"
+          ],
+          "feasible": false,
+          "total_minor": 70000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        },
+        {
+          "label": "One-page launch, narrowed to fit",
+          "pages": 1,
+          "addon_codes": [],
+          "requested_features": [
+            "landing_pages"
+          ],
+          "feasible": true,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        }
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-05-exact-budget",
+      "latency_ms": 3963,
+      "prompt_tokens": 380,
+      "completion_tokens": 252,
+      "raw_head": "{\"pages\":3,\"addon_codes\":[],\"total_usd\":700,\"feasible\":true,\"rationale\":\"Three pages cost 500 USD for the first page plus 2 extra pages at 100 USD each, totaling 700 USD. Assets are ready, no add-ons ",
+      "parsed": true,
+      "pages": 3,
+      "addons": [],
+      "total_usd": 700.0,
+      "claimed_feasible": true,
+      "rule_total_minor": 70000,
+      "rule_feasible": true,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-05-exact-budget",
+      "latency_ms": 7171,
+      "prompt_tokens": 550,
+      "completion_tokens": 883,
+      "raw_head": "{\"pages\": 3, \"budget_usd\": 700, \"deadline_days\": 31, \"assets_ready\": true, \"features\": []}",
+      "parsed": true,
+      "options": 1,
+      "feasible_options": 1,
+      "options_detail": [
+        {
+          "label": "As briefed",
+          "pages": 3,
+          "addon_codes": [],
+          "requested_features": [],
+          "feasible": true,
+          "total_minor": 70000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        }
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-06-unsupported-ordering",
+      "latency_ms": 2863,
+      "prompt_tokens": 280,
+      "completion_tokens": 92,
+      "raw_head": "{\"pages\": 1, \"addon_codes\": [], \"total_usd\": 500, \"feasible\": false, \"rationale\": \"Client requests on-site online ordering/payment processing, which is never included per studio terms (only external_o",
+      "parsed": true,
+      "pages": 1,
+      "addons": [],
+      "total_usd": 500.0,
+      "claimed_feasible": false,
+      "rule_total_minor": 50000,
+      "rule_feasible": true,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-06-unsupported-ordering",
+      "latency_ms": 4300,
+      "prompt_tokens": 549,
+      "completion_tokens": 418,
+      "raw_head": "{\"pages\": 1, \"budget_usd\": 500, \"deadline_days\": 31, \"assets_ready\": true, \"features\": [\"landing_pages\", \"on_site_ordering\"]}",
+      "parsed": true,
+      "options": 2,
+      "feasible_options": 1,
+      "options_detail": [
+        {
+          "label": "As briefed",
+          "pages": 1,
+          "addon_codes": [],
+          "requested_features": [
+            "landing_pages",
+            "on_site_ordering"
+          ],
+          "feasible": false,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        },
+        {
+          "label": "One-page launch, narrowed to fit",
+          "pages": 1,
+          "addon_codes": [
+            "external_order_link"
+          ],
+          "requested_features": [
+            "landing_pages"
+          ],
+          "feasible": true,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        }
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-07-unsupported-multilanguage",
+      "latency_ms": 4603,
+      "prompt_tokens": 282,
+      "completion_tokens": 96,
+      "raw_head": "{\"pages\": 1, \"addon_codes\": [], \"total_usd\": 500, \"feasible\": true, \"rationale\": \"Single-page quote at 500 USD. Bilingual language switching without reload is achievable within the one-page build usin",
+      "parsed": true,
+      "pages": 1,
+      "addons": [],
+      "total_usd": 500.0,
+      "claimed_feasible": true,
+      "rule_total_minor": 50000,
+      "rule_feasible": true,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-07-unsupported-multilanguage",
+      "latency_ms": 3379,
+      "prompt_tokens": 336,
+      "completion_tokens": 53,
+      "raw_head": "{\"pages\": 1, \"budget_usd\": 800, \"deadline_days\": 31, \"assets_ready\": true, \"features\": [\"landing_pages\", \"mobile_responsive\", \"language_switching\"]}",
+      "parsed": true,
+      "options": 2,
+      "feasible_options": 1,
+      "options_detail": [
+        {
+          "label": "As briefed",
+          "pages": 1,
+          "addon_codes": [],
+          "requested_features": [
+            "landing_pages",
+            "mobile_responsive",
+            "language_switching"
+          ],
+          "feasible": false,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        },
+        {
+          "label": "One-page launch, narrowed to fit",
+          "pages": 1,
+          "addon_codes": [],
+          "requested_features": [
+            "landing_pages",
+            "mobile_responsive"
+          ],
+          "feasible": true,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        }
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-08-deadline-conflict-no-assets",
+      "latency_ms": 3520,
+      "prompt_tokens": 287,
+      "completion_tokens": 123,
+      "raw_head": "{\"pages\": 1, \"addon_codes\": [], \"total_usd\": 500, \"feasible\": false, \"rationale\": \"Client needs launch by 2026-11-05 but assets are not ready. Terms allow 3 business days to collect missing assets plu",
+      "parsed": true,
+      "pages": 1,
+      "addons": [],
+      "total_usd": 500.0,
+      "claimed_feasible": false,
+      "rule_total_minor": 50000,
+      "rule_feasible": false,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-08-deadline-conflict-no-assets",
+      "latency_ms": 3387,
+      "prompt_tokens": 342,
+      "completion_tokens": 35,
+      "raw_head": "{\"pages\": null, \"budget_usd\": 500, \"deadline_days\": 6, \"assets_ready\": false, \"features\": []}",
+      "parsed": true,
+      "options": 1,
+      "feasible_options": 0,
+      "options_detail": [
+        {
+          "label": "As briefed",
+          "pages": 1,
+          "addon_codes": [],
+          "requested_features": [],
+          "feasible": false,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        }
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-09-deadline-exact",
+      "latency_ms": 6354,
+      "prompt_tokens": 382,
+      "completion_tokens": 837,
+      "raw_head": "{\"pages\":1,\"addon_codes\":[],\"total_usd\":500,\"feasible\":true,\"rationale\":\"One landing page fits the 500 USD budget exactly. Assets are ready, and a 5-business-day lead time after assets allows delivery",
+      "parsed": true,
+      "pages": 1,
+      "addons": [],
+      "total_usd": 500.0,
+      "claimed_feasible": true,
+      "rule_total_minor": 50000,
+      "rule_feasible": true,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-09-deadline-exact",
+      "latency_ms": 3758,
+      "prompt_tokens": 552,
+      "completion_tokens": 161,
+      "raw_head": "{\"pages\": null, \"budget_usd\": 500, \"deadline_days\": 7, \"assets_ready\": true, \"features\": []}",
+      "parsed": true,
+      "options": 1,
+      "feasible_options": 1,
+      "options_detail": [
+        {
+          "label": "As briefed",
+          "pages": 1,
+          "addon_codes": [],
+          "requested_features": [],
+          "feasible": true,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        }
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-10-deadline-one-day-short",
+      "latency_ms": 3877,
+      "prompt_tokens": 284,
+      "completion_tokens": 107,
+      "raw_head": "{\"pages\": 1, \"addon_codes\": [], \"total_usd\": 500, \"feasible\": false, \"rationale\": \"A single first page costs 500 USD, meeting the budget exactly. However, the deadline of 2026-11-05 is only 4 business",
+      "parsed": true,
+      "pages": 1,
+      "addons": [],
+      "total_usd": 500.0,
+      "claimed_feasible": false,
+      "rule_total_minor": 50000,
+      "rule_feasible": false,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-10-deadline-one-day-short",
+      "latency_ms": 3915,
+      "prompt_tokens": 553,
+      "completion_tokens": 193,
+      "raw_head": "{\"pages\":null,\"budget_usd\":500.00,\"deadline_days\":6,\"assets_ready\":true,\"features\":[]}",
+      "parsed": true,
+      "options": 1,
+      "feasible_options": 0,
+      "options_detail": [
+        {
+          "label": "As briefed",
+          "pages": 1,
+          "addon_codes": [],
+          "requested_features": [],
+          "feasible": false,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        }
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-11-copywriting-over-budget",
+      "latency_ms": 3430,
+      "prompt_tokens": 285,
+      "completion_tokens": 104,
+      "raw_head": "{\"pages\": 1, \"addon_codes\": [\"copywriting\"], \"total_usd\": 650, \"feasible\": false, \"rationale\": \"One page (500 USD) plus copywriting (150 USD) totals 650 USD, which exceeds the 600 USD budget. The copy",
+      "parsed": true,
+      "pages": 1,
+      "addons": [
+        "copywriting"
+      ],
+      "total_usd": 650.0,
+      "claimed_feasible": false,
+      "rule_total_minor": 65000,
+      "rule_feasible": false,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-11-copywriting-over-budget",
+      "latency_ms": 2740,
+      "prompt_tokens": 339,
+      "completion_tokens": 45,
+      "raw_head": "{\"pages\": 1, \"budget_usd\": 600, \"deadline_days\": 31, \"assets_ready\": true, \"features\": [\"landing_pages\", \"copywriting\"]}",
+      "parsed": true,
+      "options": 2,
+      "feasible_options": 1,
+      "options_detail": [
+        {
+          "label": "As briefed",
+          "pages": 1,
+          "addon_codes": [],
+          "requested_features": [
+            "landing_pages",
+            "copywriting"
+          ],
+          "feasible": false,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        },
+        {
+          "label": "One-page launch, narrowed to fit",
+          "pages": 1,
+          "addon_codes": [],
+          "requested_features": [
+            "landing_pages"
+          ],
+          "feasible": true,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        }
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-12-revision-addon-fits",
+      "latency_ms": 3567,
+      "prompt_tokens": 284,
+      "completion_tokens": 92,
+      "raw_head": "{\"pages\": 1, \"addon_codes\": [\"extra_revision_round\"], \"total_usd\": 550, \"feasible\": true, \"rationale\": \"One page at 500 USD plus one extra revision round at 50 USD totals 550 USD, within the 600 USD b",
+      "parsed": true,
+      "pages": 1,
+      "addons": [
+        "extra_revision_round"
+      ],
+      "total_usd": 550.0,
+      "claimed_feasible": true,
+      "rule_total_minor": 55000,
+      "rule_feasible": true,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-12-revision-addon-fits",
+      "latency_ms": 3503,
+      "prompt_tokens": 338,
+      "completion_tokens": 49,
+      "raw_head": "{\"pages\": 1, \"budget_usd\": 600, \"deadline_days\": 31, \"assets_ready\": true, \"features\": [\"landing_pages\", \"two_revision_rounds\"]}",
+      "parsed": true,
+      "options": 1,
+      "feasible_options": 1,
+      "options_detail": [
+        {
+          "label": "As briefed",
+          "pages": 1,
+          "addon_codes": [],
+          "requested_features": [
+            "landing_pages",
+            "two_revision_rounds"
+          ],
+          "feasible": true,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        }
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-13-external-link-free",
+      "latency_ms": 4213,
+      "prompt_tokens": 380,
+      "completion_tokens": 310,
+      "raw_head": "{\"pages\":1,\"addon_codes\":[\"external_order_link\"],\"total_usd\":500,\"feasible\":true,\"rationale\":\"One-page site with an external button linking to the client's Square ordering page. External order link ad",
+      "parsed": true,
+      "pages": 1,
+      "addons": [
+        "external_order_link"
+      ],
+      "total_usd": 500.0,
+      "claimed_feasible": true,
+      "rule_total_minor": 50000,
+      "rule_feasible": true,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-13-external-link-free",
+      "latency_ms": 3267,
+      "prompt_tokens": 335,
+      "completion_tokens": 46,
+      "raw_head": "{\"pages\": 1, \"budget_usd\": 500, \"deadline_days\": 31, \"assets_ready\": true, \"features\": [\"landing_pages\", \"external_order_link\"]}",
+      "parsed": true,
+      "options": 1,
+      "feasible_options": 1,
+      "options_detail": [
+        {
+          "label": "As briefed",
+          "pages": 1,
+          "addon_codes": [],
+          "requested_features": [
+            "landing_pages",
+            "external_order_link"
+          ],
+          "feasible": true,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        }
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-14-zero-pages",
+      "latency_ms": 4045,
+      "prompt_tokens": 380,
+      "completion_tokens": 288,
+      "raw_head": "{\"pages\":0,\"addon_codes\":[],\"total_usd\":0,\"feasible\":false,\"rationale\":\"The brief requests a logo refresh only, with no website pages. Logo design/refresh is not included in the studio's listed capabi",
+      "parsed": true,
+      "pages": 0,
+      "addons": [],
+      "total_usd": 0.0,
+      "claimed_feasible": false,
+      "rule_total_minor": 0,
+      "rule_feasible": false,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-14-zero-pages",
+      "latency_ms": 5674,
+      "prompt_tokens": 550,
+      "completion_tokens": 715,
+      "raw_head": "{\"pages\": 0, \"budget_usd\": 300, \"deadline_days\": 31, \"assets_ready\": true, \"features\": [\"logo_refresh\"]}",
+      "parsed": true,
+      "options": 2,
+      "feasible_options": 0,
+      "options_detail": [
+        {
+          "label": "As briefed",
+          "pages": 0,
+          "addon_codes": [],
+          "requested_features": [
+            "logo_refresh"
+          ],
+          "feasible": false,
+          "total_minor": 0,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        },
+        {
+          "label": "One-page launch, narrowed to fit",
+          "pages": 1,
+          "addon_codes": [],
+          "requested_features": [],
+          "feasible": false,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        }
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-15-unknown-addon",
+      "latency_ms": 4546,
+      "prompt_tokens": 377,
+      "completion_tokens": 448,
+      "raw_head": "{\"pages\":1,\"addon_codes\":[],\"total_usd\":500,\"feasible\":false,\"rationale\":\"One-page site is within terms at 500 USD and the 2026-11-30 deadline is achievable with materials ready. However, the requeste",
+      "parsed": true,
+      "pages": 1,
+      "addons": [],
+      "total_usd": 500.0,
+      "claimed_feasible": false,
+      "rule_total_minor": 50000,
+      "rule_feasible": true,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-15-unknown-addon",
+      "latency_ms": 3784,
+      "prompt_tokens": 547,
+      "completion_tokens": 199,
+      "raw_head": "{\"pages\":1,\"budget_usd\":900,\"deadline_days\":31,\"assets_ready\":true,\"features\":[\"landing_pages\",\"seo_audit\"]}",
+      "parsed": true,
+      "options": 2,
+      "feasible_options": 1,
+      "options_detail": [
+        {
+          "label": "As briefed",
+          "pages": 1,
+          "addon_codes": [],
+          "requested_features": [
+            "landing_pages",
+            "seo_audit"
+          ],
+          "feasible": false,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        },
+        {
+          "label": "One-page launch, narrowed to fit",
+          "pages": 1,
+          "addon_codes": [],
+          "requested_features": [
+            "landing_pages"
+          ],
+          "feasible": true,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        }
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-16-large-page-count",
+      "latency_ms": 3119,
+      "prompt_tokens": 280,
+      "completion_tokens": 96,
+      "raw_head": "{\"pages\": 6, \"addon_codes\": [], \"total_usd\": 1000, \"feasible\": true, \"rationale\": \"Six pages = 500 + 5×100 = 1000 USD, matching the budget exactly. No add-ons needed. Materials are ready, and a 6-page",
+      "parsed": true,
+      "pages": 6,
+      "addons": [],
+      "total_usd": 1000.0,
+      "claimed_feasible": true,
+      "rule_total_minor": 100000,
+      "rule_feasible": true,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-16-large-page-count",
+      "latency_ms": 6501,
+      "prompt_tokens": 549,
+      "completion_tokens": 748,
+      "raw_head": "{\"pages\": 6, \"budget_usd\": 1000, \"deadline_days\": 46, \"assets_ready\": true, \"features\": []}",
+      "parsed": true,
+      "options": 1,
+      "feasible_options": 1,
+      "options_detail": [
+        {
+          "label": "As briefed",
+          "pages": 6,
+          "addon_codes": [],
+          "requested_features": [],
+          "feasible": true,
+          "total_minor": 100000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        }
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-17-unsupported-and-over-budget",
+      "latency_ms": 6015,
+      "prompt_tokens": 381,
+      "completion_tokens": 525,
+      "raw_head": "{\"pages\":3,\"addon_codes\":[\"external_order_link\"],\"total_usd\":700,\"feasible\":false,\"rationale\":\"Three pages cost 500 for the first page plus 200 for two extra pages = 700 USD, exceeding the 500 USD bud",
+      "parsed": true,
+      "pages": 3,
+      "addons": [
+        "external_order_link"
+      ],
+      "total_usd": 700.0,
+      "claimed_feasible": false,
+      "rule_total_minor": 70000,
+      "rule_feasible": false,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-17-unsupported-and-over-budget",
+      "latency_ms": 3934,
+      "prompt_tokens": 336,
+      "completion_tokens": 42,
+      "raw_head": "{\"pages\": 3, \"budget_usd\": 500, \"deadline_days\": 31, \"assets_ready\": true, \"features\": [\"payments_built_in\"]}",
+      "parsed": true,
+      "options": 2,
+      "feasible_options": 1,
+      "options_detail": [
+        {
+          "label": "As briefed",
+          "pages": 3,
+          "addon_codes": [],
+          "requested_features": [
+            "payments_built_in"
+          ],
+          "feasible": false,
+          "total_minor": 70000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        },
+        {
+          "label": "One-page launch, narrowed to fit",
+          "pages": 1,
+          "addon_codes": [],
+          "requested_features": [],
+          "feasible": true,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        }
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-18-three-problems-at-once",
+      "latency_ms": 5569,
+      "prompt_tokens": 290,
+      "completion_tokens": 120,
+      "raw_head": "{\"pages\":3,\"addon_codes\":[\"external_order_link\"],\"total_usd\":700,\"feasible\":false,\"rationale\":\"Three pages cost 500 + 2×100 = 700 USD, already over the 500 budget before any add-ons. Online ordering i",
+      "parsed": true,
+      "pages": 3,
+      "addons": [
+        "external_order_link"
+      ],
+      "total_usd": 700.0,
+      "claimed_feasible": false,
+      "rule_total_minor": 70000,
+      "rule_feasible": false,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-18-three-problems-at-once",
+      "latency_ms": 7040,
+      "prompt_tokens": 345,
+      "completion_tokens": 40,
+      "raw_head": "{\"pages\": 3, \"budget_usd\": 500, \"deadline_days\": 6, \"assets_ready\": false, \"features\": [\"online_ordering\"]}",
+      "parsed": true,
+      "options": 2,
+      "feasible_options": 0,
+      "options_detail": [
+        {
+          "label": "As briefed",
+          "pages": 3,
+          "addon_codes": [],
+          "requested_features": [
+            "online_ordering"
+          ],
+          "feasible": false,
+          "total_minor": 70000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        },
+        {
+          "label": "One-page launch, narrowed to fit",
+          "pages": 1,
+          "addon_codes": [
+            "external_order_link"
+          ],
+          "requested_features": [],
+          "feasible": false,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        }
+      ]
+    },
+    {
+      "arm": "baseline",
+      "case": "case-19-single-page-tight-deadline",
+      "latency_ms": 5799,
+      "prompt_tokens": 383,
+      "completion_tokens": 441,
+      "raw_head": "{\"pages\":1,\"addon_codes\":[],\"total_usd\":500,\"feasible\":true,\"rationale\":\"One-page site only; assets are ready and the 5-business-day lead time fits before 9 November. No add-ons requested or needed, s",
+      "parsed": true,
+      "pages": 1,
+      "addons": [],
+      "total_usd": 500.0,
+      "claimed_feasible": true,
+      "rule_total_minor": 50000,
+      "rule_feasible": true,
+      "price_mismatch": false,
+      "false_promise": false,
+      "unknown_addons": [],
+      "unsafe": false
+    },
+    {
+      "arm": "pipeline",
+      "case": "case-19-single-page-tight-deadline",
+      "latency_ms": 4269,
+      "prompt_tokens": 553,
+      "completion_tokens": 287,
+      "raw_head": "{\"pages\": 1, \"budget_usd\": 550, \"deadline_days\": 10, \"assets_ready\": true, \"features\": [\"landing_pages\"]}",
+      "parsed": true,
+      "options": 1,
+      "feasible_options": 1,
+      "options_detail": [
+        {
+          "label": "As briefed",
+          "pages": 1,
+          "addon_codes": [],
+          "requested_features": [
+            "landing_pages"
+          ],
+          "feasible": true,
+          "total_minor": 50000,
+          "price_matches_rules": true,
+          "feasible_matches_rules": true
+        }
+      ]
+    }
+  ]
+}

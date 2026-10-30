@@ -19,7 +19,9 @@ class ModelFacts(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    pages: int | None = Field(default=None, ge=1, le=20)
+    # 0 is allowed so "no pages" reaches the rule layer and is reported as
+    # invalid_scope instead of being rejected as a malformed answer.
+    pages: int | None = Field(default=None, ge=0, le=20)
     budget_usd: float | None = Field(default=None, ge=0)
     deadline_days: int | None = Field(default=None, ge=0, le=365)
     assets_ready: bool | None = None

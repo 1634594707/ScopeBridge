@@ -33,7 +33,7 @@ def build_candidates(
     assets_ready: bool,
     today: date,
 ) -> list[tuple[CandidateScope, ValidationResult]]:
-    pages = facts.pages or 1
+    pages = facts.pages if facts.pages is not None else 1
     features = tuple(facts.features)
 
     primary = CandidateScope(

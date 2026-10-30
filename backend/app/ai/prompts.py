@@ -4,10 +4,12 @@ The model's job here is comprehension, not pricing and not proposal design: it
 reads the brief and returns five facts. Candidate scopes are constructed by the
 server (`app/ai/candidates.py`) and priced by `app.rules`.
 
-Measured 2026-10-30 against this gateway: asking the model to emit a nested
-object with candidate scopes produced a different JSON shape on most attempts
-(persona reports, markdown fences), while the five-key fact sheet below matched
-on every attempt. The narrow schema is the one that survives.
+Measured 2026-10-30 against this gateway: asking for a nested object with
+candidate scopes produced a different JSON shape on most attempts. The five-key
+fact sheet is better but not reliable — 7/19 on one run, 9/19 on another — and
+the failures are mostly markdown-fenced JSON with invented keys. v7 states the
+contract first, forbids extra keys explicitly, and keeps one filled example.
+Prompt changes alone are reported as measurements, never assumed to be enough.
 """
 
 from __future__ import annotations
@@ -17,20 +19,27 @@ from datetime import date
 from app.requirements.models import RequirementMessage
 from app.rules.types import RuleSet
 
-PROMPT_VERSION = "facts-v6"
+PROMPT_VERSION = "facts-v7"
+
+CONTRACT = (
+    '{"pages": integer|null, "budget_usd": number|null, "deadline_days": integer|null, '
+    '"assets_ready": boolean|null, "features": [string]}'
+)
 
 SYSTEM_PROMPT = (
-    "Extract facts from a client brief for a web design studio. "
-    "Return JSON only: no prose, no markdown, no code fences.\n"
-    "Keys: pages (integer|null), budget_usd (number|null), deadline_days (integer|null), "
-    "assets_ready (boolean|null), features (array of strings).\n"
-    "Use null when the brief does not say. Never guess a price. "
-    "Never add keys.\n"
-    "features lists what the client asked for, as short snake_case codes. Use the capability "
-    "codes when they match, and still name asks this studio does not offer "
-    "(for example on_site_ordering) — never silently narrow the request.\n"
-    'Example: {"pages": 2, "budget_usd": 800, "deadline_days": 21, "assets_ready": true, '
+    "OUTPUT CONTRACT: one JSON object with exactly these five keys and no others: "
+    + CONTRACT
+    + "\n"
+    "Renaming keys, nesting them under client/project/scope, or adding summary/status/decision "
+    "is a failure. Do not use triple backticks. Do not write prose before or after the JSON.\n"
+    "Use null when the brief does not say. Never guess a price.\n"
+    "features lists what the client asked for as short snake_case codes; use the capability "
+    "codes from the input when they match, and still name asks this studio does not offer "
+    "(for example on_site_ordering).\n"
+    'Example of the complete answer for a different brief: {"pages": 2, "budget_usd": 800, '
+    '"deadline_days": 21, "assets_ready": true, '
     '"features": ["landing_pages", "on_site_ordering"]}'
+    "\nReturn only that object."
 )
 
 
@@ -64,4 +73,7 @@ def build_user_prompt(
             lines.append("(recorded: " + "; ".join(recorded) + ")")
         lines.append("")
     lines.append("Return the JSON now.")
-    return "\n".join(lines)
+    # The contract travels with the payload as well as in the system message:
+    # this gateway has been observed ignoring instructions that only live there,
+    # in which case the model treats the brief as a document to summarise.
+    return SYSTEM_PROMPT + "\n\n" + "\n".join(lines)

@@ -59,6 +59,12 @@ message after that creates a new revision and supersedes open drafts — never e
   snapshot in the same transaction as the `PAID` transition.
 - **Version diff** — when a quote is reissued, the new version shows what changed against the
   previous one, line by line, with the total delta.
+- **Structured change requests** — the client can change the brief *and* the budget, deadline or
+  material state from the portal; the next quote prices the new record, and a stale revision returns
+  `409` without losing what was typed.
+- **Recovery when PayPal never answers** — an attempt with no order id can be retried with the same
+  `PayPal-Request-Id` (bounded), or closed by the studio after a written check, which unlocks the
+  quote and records who closed it and why.
 - **Comparative evaluation** — 19 fixed cases run through both a one-shot "model quotes it" arm and
   the facts-and-rules pipeline, with unparseable answers counted as failures.
 - **Local-first operation** — PostgreSQL in Docker, single operator account; the model and PayPal are
@@ -210,8 +216,11 @@ pnpm exec vite preview        # http://127.0.0.1:4173
    The quote turns read-only and the payment card appears.
 6. Press **Continue to PayPal**, sign in with a **Sandbox Personal** account from
    <https://developer.paypal.com/dashboard/accounts>, and approve. PayPal returns you to
-   `/pay/<payment-id>`; press **I approved — capture now**. The server captures the order, verifies
-   amount and currency, marks the quote `PAID` and writes the order snapshot.
+   `/pay/<payment-id>`, which confirms the payment automatically; the server verifies amount and
+   currency, marks the quote `PAID` and writes the order snapshot.
+
+A two-path shooting script (happy path and the "no order id" recovery) is in
+[docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
 
 Try an infeasible scope too: three pages against a $500 budget returns
 `Scope totals $700.00 against a budget of $500.00; short by $200.00.`
@@ -240,7 +249,7 @@ To demonstrate recovery without a stalled network, stop the API between approval
 | `POST` | `/api/portal/quotes/{id}/confirm` | client token |
 | `POST` | `/api/portal/quotes/{id}/payment-attempts` | client token + `Idempotency-Key` |
 | `GET` | `/api/portal/payments/{id}` · `POST .../capture` | client token |
-| `POST` | `/api/payments/{id}/reconcile` | seller (CSRF) |
+| `POST` | `/api/payments/{id}/reconcile` · `/retry-create` · `/close` | seller (CSRF) |
 | `GET` | `/api/requirements/{id}/payments` · `/order` | seller |
 | `GET` | `/api/orders/{id}` | seller |
 | `GET` | `/api/health` | public |
@@ -253,7 +262,7 @@ Errors are always `{"code", "message", "details?"}` — no stack traces, SQL or 
 
 ```bash
 cd backend
-uv run pytest -q            # 65 tests
+uv run pytest -q            # 78 tests
 uv run ruff check .
 ```
 
@@ -290,19 +299,30 @@ Two arms, same briefs, same published terms, same model:
 Reports land in `evals/reports/<timestamp>.{json,md}` with per-case verdicts, average and p95 latency,
 and token counts. Nothing in the report is estimated: failed calls are counted as failures.
 
-Latest recorded run (`evals/reports/20261030T132147Z.md`, 19 cases, one run each, sequential):
+Every rate names its denominator. `all attempts` includes unparseable and failed calls; `parsed`
+is used only where the label says so. Pipeline "unsafe releases" is not assumed to be zero: each
+option's displayed price and verdict are re-computed from the rules and mismatches are counted.
+
+Latest recorded run (`evals/reports/20261030T151055Z-facts-v7-inline-both.md`, 19 cases, one run
+each, sequential):
 
 | metric | baseline | pipeline |
 | --- | --- | --- |
-| usable answers | 5 / 19 | 7 / 19 |
-| claims the rules reject | 1 | 0 |
+| parse rate | 18 / 19 | 19 / 19 |
+| transport failures | 1 | 0 |
+| claims the rules reject | 2 | n/a |
 | wrong or missing price | 0 of the parsed | n/a (server prices) |
-| average latency | 4.3 s | 3.7 s |
+| unsafe releases (measured) | 2 | 0 |
+| original request satisfied | n/a | 6 |
+| narrowed option available | n/a | 6 |
+| honest "no solution" | n/a | 7 |
+| average latency | 4.3 s | 4.3 s |
 
-The limiting factor in that run was **model compliance**, not safety: the gateway returned prose or
-its own schema for most short briefs, and those answers are counted as failures rather than repaired.
-Baseline still produced one quote that the rules reject while calling it feasible; the pipeline cannot
-do that because it never prices anything itself.
+An earlier run of the same harness (`20261030T132147Z.md`) had only 7/19 pipeline answers parse.
+The cause was not the wording but the channel: this gateway did not deliver the system message, so
+the contract never reached the model. The contract is now sent with the payload as well; parse rate
+went from 47% to 100% on the same cases, and the change is recorded in
+`.agents/notes/implemented/architecture/2026-10-30-contract-must-travel-with-payload.md`.
 
 ---
 
@@ -339,8 +359,11 @@ do that because it never prices anything itself.
 - `features` come back as free strings; codes that are not capabilities appear under
   "asked for but not offered" instead of being mapped silently.
 - Payments are sandbox-only. There are no webhooks: an unclear capture is resolved by the seller
-  pressing **Verify with PayPal** or the client refreshing the payment page, so a quote can stay
+  pressing **Verify with PayPal**, retrying the create call, or closing the attempt with a written
+  note. Closing a quote unlocks it only after that human check, so a quote can stay
   `PAYMENT_LOCKED` until someone acts.
+- Closing an attempt is a human judgement; the server cannot prove that PayPal has no order. The
+  note and the resolving seller are stored on the attempt for review.
 - No refunds, partial captures or unattended reconciliation job. `PAYPAL_MERCHANT_ID` is optional; when
   unset only amount and currency are verified, not the payee.
 - The demo price list is fictional; it is a product fixture, not a market rate.

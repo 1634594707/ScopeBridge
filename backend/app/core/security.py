@@ -4,12 +4,16 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import os
 import secrets
 
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
 
-_hasher = PasswordHasher()
+# Argon2 defaults to 64 MiB per hash. Tests set a lower cost so constrained CI
+# machines do not fail on memory allocation; production keeps the default.
+_MEMORY_COST = int(os.environ.get("ARGON2_MEMORY_COST", "65536"))
+_hasher = PasswordHasher(memory_cost=_MEMORY_COST, parallelism=1)
 
 
 def hash_password(password: str) -> str:
