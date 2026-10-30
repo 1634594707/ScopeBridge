@@ -10,6 +10,7 @@ import { Field, TextArea } from "../components/Field";
 import { MessageTimeline } from "../components/MessageTimeline";
 import { ModelDraftPanel } from "../components/ModelDraftPanel";
 import { Money } from "../components/Money";
+import { PaymentHistory } from "../components/PaymentHistory";
 import { PageHeader } from "../components/PageHeader";
 import { ScopeEditor } from "../components/ScopeEditor";
 import { StatusPill } from "../components/StatusPill";
@@ -213,6 +214,8 @@ export default function RequirementPage() {
               </ul>
             )}
           </Card>
+
+          <PaymentHistory requirementId={id} />
         </div>
 
         <aside className="flex flex-col gap-6">

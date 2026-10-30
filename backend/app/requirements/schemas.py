@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.payments.schemas import PaymentOut, SnapshotOut
 from app.proposals.schemas import ProposalOut
 from app.quotes.schemas import QuoteOut
 
@@ -70,5 +71,7 @@ class PortalView(BaseModel):
     messages: list[MessageOut]
     proposals: list[ProposalOut]
     quotes: list[QuoteOut]
+    payments: list[PaymentOut]
+    order: SnapshotOut | None
     service_rule_version: int
     currency: str

@@ -1,4 +1,10 @@
-export type QuoteStatus = "DRAFT" | "REVIEWED" | "CONFIRMED" | "SUPERSEDED";
+export type QuoteStatus =
+  | "DRAFT"
+  | "REVIEWED"
+  | "CONFIRMED"
+  | "PAYMENT_LOCKED"
+  | "PAID"
+  | "SUPERSEDED";
 export type Author = "CLIENT" | "SELLER";
 
 export interface Seller {
@@ -116,11 +122,47 @@ export interface Quote {
   items: QuoteItem[];
 }
 
+export interface Payment {
+  id: string;
+  quote_id: string;
+  status: string;
+  amount_minor: number;
+  currency: string;
+  approve_url: string | null;
+  paypal_order_id: string | null;
+  paypal_capture_id: string | null;
+  error_code: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface SnapshotItem {
+  code: string;
+  label: string;
+  amount_minor: number;
+  included: boolean;
+}
+
+export interface OrderSnapshot {
+  id: string;
+  requirement_id: string;
+  quote_id: string;
+  order_id: string;
+  capture_id: string;
+  amount_minor: number;
+  currency: string;
+  payer_email: string;
+  captured_at: string;
+  items: SnapshotItem[];
+}
+
 export interface PortalView {
   requirement: RequirementSummary;
   messages: Message[];
   proposals: Proposal[];
   quotes: Quote[];
+  payments: Payment[];
+  order: OrderSnapshot | null;
   service_rule_version: number;
   currency: string;
 }

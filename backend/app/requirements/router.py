@@ -12,6 +12,7 @@ from app.accounts.models import User
 from app.api.deps import SellerAuth, require_csrf, require_customer, require_seller
 from app.core.config import get_settings
 from app.core.db import get_db
+from app.payments import service as payments_service
 from app.proposals import service as proposals_service
 from app.quotes import service as quotes_service
 from app.requirements import service
@@ -89,11 +90,14 @@ def read_portal(
     db: Session = Depends(get_db),
 ) -> PortalView:
     rules = rules_service.get_active_rules(db)
+    order = payments_service.snapshot_for_requirement(db, requirement.id)
     return PortalView(
         requirement=service.summarize(requirement),
         messages=[service.serialize_message(message) for message in requirement.messages],
         proposals=proposals_service.list_for_requirement(db, requirement.id),
         quotes=quotes_service.list_for_requirement(db, requirement.id),
+        payments=payments_service.list_for_requirement(db, requirement.id),
+        order=payments_service.serialize_snapshot(order) if order else None,
         service_rule_version=rules.version_no,
         currency=rules.currency,
     )

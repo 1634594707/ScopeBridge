@@ -10,6 +10,7 @@ import { Card, CardHeader } from "../components/Card";
 import { Field, TextArea } from "../components/Field";
 import { MessageTimeline } from "../components/MessageTimeline";
 import { Money } from "../components/Money";
+import { PaymentPanel } from "../components/PaymentPanel";
 import { PageHeader } from "../components/PageHeader";
 import { ProposalCard } from "../components/ProposalCard";
 import { QuoteDocument } from "../components/QuoteDocument";
@@ -42,6 +43,16 @@ export default function PortalPage() {
   const confirm = useMutation({
     mutationFn: api.confirmQuote,
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["portal", storedToken] }),
+  });
+
+  const startPayment = useMutation({
+    mutationFn: (quoteId: string) => api.startPayment(quoteId, crypto.randomUUID()),
+    onSuccess: (payment) => {
+      queryClient.invalidateQueries({ queryKey: ["portal", storedToken] });
+      if (payment.approve_url) {
+        window.location.href = payment.approve_url;
+      }
+    },
   });
 
   const requestChange = useMutation({
@@ -202,11 +213,11 @@ export default function PortalPage() {
                       <p className="max-w-[42ch] text-[12px] leading-relaxed text-ink-muted">
                         {latestQuote.status === "REVIEWED"
                           ? "Confirming freezes this version and opens the sandbox payment step."
-                          : latestQuote.status === "CONFIRMED"
-                            ? "This version is confirmed and read-only. Any new work starts a new brief."
-                            : latestQuote.status === "SUPERSEDED"
-                              ? "This version was replaced after the brief changed."
-                              : "The studio has not reviewed this draft yet."}
+                          : latestQuote.status === "SUPERSEDED"
+                            ? "This version was replaced after the brief changed."
+                            : latestQuote.status === "DRAFT"
+                              ? "The studio has not reviewed this draft yet."
+                              : "Anything that changes the work starts a new brief; this version stays as it is."}
                       </p>
                       {latestQuote.status === "REVIEWED" ? (
                         <Button
@@ -220,6 +231,19 @@ export default function PortalPage() {
                     </>
                   }
                 />
+
+                {["CONFIRMED", "PAYMENT_LOCKED", "PAID"].includes(latestQuote.status) ? (
+                  <PaymentPanel
+                    quote={latestQuote}
+                    payment={data.payments.find((item) => item.quote_id === latestQuote.id)}
+                    order={data.order}
+                    busy={startPayment.isPending}
+                    error={
+                      startPayment.error instanceof ApiError ? startPayment.error.message : ""
+                    }
+                    onStart={() => startPayment.mutate(latestQuote.id)}
+                  />
+                ) : null}
                 {confirmError ? (
                   <p className="text-[12px] text-flag-bad">{confirmError.message}</p>
                 ) : null}

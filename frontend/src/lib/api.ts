@@ -4,6 +4,8 @@ import type {
   Extraction,
   ExtractionEnvelope,
   IntakeResponse,
+  OrderSnapshot,
+  Payment,
   PortalView,
   Proposal,
   Quote,
@@ -36,6 +38,7 @@ interface RequestOptions {
   method?: "GET" | "POST" | "DELETE";
   body?: unknown;
   customer?: boolean;
+  headers?: Record<string, string>;
 }
 
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
@@ -52,6 +55,9 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
     if (token) {
       headers["X-Customer-Token"] = token;
     }
+  }
+  if (options.headers) {
+    Object.assign(headers, options.headers);
   }
 
   const response = await fetch(`/api${path}`, {
@@ -139,4 +145,25 @@ export const api = {
 
   confirmQuote: (id: string) =>
     request<Quote>(`/portal/quotes/${id}/confirm`, { method: "POST", customer: true }),
+
+  startPayment: (quoteId: string, idempotencyKey: string) =>
+    request<Payment>(`/portal/quotes/${quoteId}/payment-attempts`, {
+      method: "POST",
+      customer: true,
+      headers: { "Idempotency-Key": idempotencyKey },
+    }),
+
+  payment: (id: string) => request<Payment>(`/portal/payments/${id}`, { customer: true }),
+
+  capturePayment: (id: string) =>
+    request<Payment>(`/portal/payments/${id}/capture`, { method: "POST", customer: true }),
+
+  reconcilePayment: (id: string) =>
+    request<Payment>(`/payments/${id}/reconcile`, { method: "POST" }),
+
+  requirementPayments: (id: string) =>
+    request<Payment[]>(`/requirements/${id}/payments`),
+
+  requirementOrder: (id: string) =>
+    request<{ order: OrderSnapshot | null }>(`/requirements/${id}/order`),
 };

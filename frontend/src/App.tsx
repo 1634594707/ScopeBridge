@@ -4,6 +4,7 @@ import { RequireSeller } from "./hooks/useSession";
 import LandingPage from "./pages/LandingPage";
 import StartPage from "./pages/StartPage";
 import SignInPage from "./pages/SignInPage";
+import PayPage from "./pages/PayPage";
 import PortalPage from "./pages/PortalPage";
 import ConsolePage from "./pages/ConsolePage";
 import RequirementPage from "./pages/RequirementPage";
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="/start" element={<StartPage />} />
         <Route path="/signin" element={<SignInPage />} />
         <Route path="/r/:token" element={<PortalPage />} />
+        <Route path="/pay/:paymentId" element={<PayPage />} />
         <Route path="/rules" element={<RulesPage />} />
       </Route>
       <Route element={<SellerLayout />}>

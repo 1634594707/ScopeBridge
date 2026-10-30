@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     paypal_base_url: str = "https://api-m.sandbox.paypal.com"
     paypal_client_id: str = ""
     paypal_client_secret: str = ""
+    # Optional: when set, a capture is only accepted from this merchant.
+    paypal_merchant_id: str = ""
+    paypal_timeout_seconds: float = 30.0
 
     @field_validator("session_secret")
     @classmethod

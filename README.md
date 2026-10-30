@@ -34,7 +34,7 @@ message after that creates a new revision and supersedes open drafts — never e
 
 ---
 
-## What is implemented (M0–M3)
+## What is implemented (M0–M4)
 
 - **Versioned service rules** — base page, extra pages, add-ons, capability list, exclusions and
   lead time are stored as an immutable rule version; historical quotes keep their original numbers.
@@ -52,11 +52,21 @@ message after that creates a new revision and supersedes open drafts — never e
   returns five facts (`pages`, `budget_usd`, `deadline_days`, `assets_ready`, `features`). The studio
   turns those facts into at most two options and prices them; the model never supplies an amount.
   Every call is stored in `ai_extractions` with model, prompt version, raw output, latency and error.
-- **Local-first operation** — PostgreSQL in Docker, single operator account; the model is the only
-  external service, and the manual path works without it.
+- **PayPal sandbox payment** — the client confirms a quote, then pays through PayPal Orders v2
+  (`create → approve → capture`). The quote is locked before the first external call; the amount is
+  read from the confirmed quote on the server; a lost capture response parks the attempt in
+  `RECONCILING` until the original order is queried. A successful capture writes an immutable order
+  snapshot in the same transaction as the `PAID` transition.
+- **Local-first operation** — PostgreSQL in Docker, single operator account; the model and PayPal are
+  the only external services, and the manual path works without the model.
 
-Not implemented yet (planned, see `docs/FORMAL_PROPOSAL.md`): PayPal sandbox create/capture/reconcile
-(M4), evaluation suite at 20 cases (M5), demo video and submission material (M6).
+Not implemented yet (planned, see `docs/FORMAL_PROPOSAL.md`): evaluation suite at 20 cases (M5),
+demo video and submission material (M6); refunds, partial captures and unattended reconciliation are
+out of scope for the hackathon build.
+
+| Payment on the client portal | Payment history in the console |
+| --- | --- |
+| ![Payment panel](docs/screenshots/09-payment-panel.png) | ![Payment history](docs/screenshots/10-payment-history.png) |
 
 | Model draft | Options it produced |
 | --- | --- |
@@ -80,6 +90,7 @@ flowchart LR
         AI["ai: fact extraction"]
         PROP["proposals"]
         QUOTE["quotes: state machine"]
+        PAY["payments: lock, capture, reconcile"]
         RULES["rules: pure functions"]
         SR["service_rules"]
     end
@@ -95,18 +106,21 @@ flowchart LR
     R --> AI
     R --> PROP
     R --> QUOTE
+    R --> PAY
     R --> SR
     AI --> RULES
     PROP --> RULES
     QUOTE --> RULES
+    PAY --> QUOTE
     AUTH --> DB
     AI --> DB
     REQ --> DB
     PROP --> DB
     QUOTE --> DB
+    PAY --> DB
     SR --> DB
     AI -.-> LLM
-    QUOTE -.-> PG
+    PAY -.-> PG
 ```
 
 Dependency direction is one-way: `router → service → rules/models`. `app/rules/` has no database,
@@ -185,10 +199,18 @@ pnpm exec vite preview        # http://127.0.0.1:4173
    and **Draft quote**.
 4. On the quote page press **Review and issue**.
 5. **Back as the client** — open the private link, choose the scope, press **Confirm this version**.
-   The quote turns read-only.
+   The quote turns read-only and the payment card appears.
+6. Press **Continue to PayPal**, sign in with a **Sandbox Personal** account from
+   <https://developer.paypal.com/dashboard/accounts>, and approve. PayPal returns you to
+   `/pay/<payment-id>`; press **I approved — capture now**. The server captures the order, verifies
+   amount and currency, marks the quote `PAID` and writes the order snapshot.
 
 Try an infeasible scope too: three pages against a $500 budget returns
 `Scope totals $700.00 against a budget of $500.00; short by $200.00.`
+
+To demonstrate recovery without a stalled network, stop the API between approval and capture, press
+**I approved — capture now** (the request fails), start the API again, then press
+**Verify with PayPal** in the seller console: the attempt moves from `VERIFYING` to `COMPLETED`.
 
 ---
 
@@ -208,6 +230,11 @@ Try an infeasible scope too: three pages against a $500 budget returns
 | `GET` | `/api/portal` · `POST /api/portal/messages` | client token |
 | `POST` | `/api/portal/proposals/{id}/select` | client token |
 | `POST` | `/api/portal/quotes/{id}/confirm` | client token |
+| `POST` | `/api/portal/quotes/{id}/payment-attempts` | client token + `Idempotency-Key` |
+| `GET` | `/api/portal/payments/{id}` · `POST .../capture` | client token |
+| `POST` | `/api/payments/{id}/reconcile` | seller (CSRF) |
+| `GET` | `/api/requirements/{id}/payments` · `/order` | seller |
+| `GET` | `/api/orders/{id}` | seller |
 | `GET` | `/api/health` | public |
 
 Errors are always `{"code", "message", "details?"}` — no stack traces, SQL or tokens.
@@ -218,7 +245,7 @@ Errors are always `{"code", "message", "details?"}` — no stack traces, SQL or 
 
 ```bash
 cd backend
-uv run pytest -q            # 40 tests
+uv run pytest -q            # 50 tests
 uv run ruff check .
 ```
 
@@ -231,6 +258,9 @@ uv run ruff check .
 - `test_eval_cases.py` — replays the five fixed cases in `evals/cases/`.
 - `test_ai_extraction.py` — server-built options, model money ignored, prose/extra keys/out-of-range
   pages rejected, evidence row written, empty latest draft returns `null`.
+- `test_api_payment.py` — quote lock on attempt, idempotency replay and conflict, capture writes one
+  snapshot, amount mismatch stays in `RECONCILING`, lost response recovered by reconcile, declined
+  capture unlocks the quote, cross-tenant access returns 404.
 
 Fixture cases live in `evals/` with their expected verdicts; changing a rule means updating the case
 first, not loosening the assertion.
@@ -252,6 +282,10 @@ first, not loosening the assertion.
 - **Model boundary**: `app/ai/client.py` is the only place that speaks HTTP to a model; failures are
   surfaced as `502`, invalid shapes as `422`, and every attempt (including failures) is stored in
   `ai_extractions` with its prompt version.
+- **Payments lock before they call out**: `app/payments/service.py` commits the attempt and the
+  `PAYMENT_LOCKED` state before touching PayPal, then only a verified `COMPLETED` capture can write the
+  snapshot and move the quote to `PAID`. See
+  `.agents/notes/implemented/architecture/2026-10-30-payment-lock-and-verify.md`.
 - **Secrets** stay in `.env` (git-ignored). The PayPal sandbox credentials used during development are
   not part of the repository; only `.env.example` is tracked.
 
@@ -259,11 +293,17 @@ first, not loosening the assertion.
 
 - `POST /api/requirements` has no rate limit; add one before exposing the app publicly.
 - Quote immutability is enforced in the application layer, not by database triggers.
-- No audit log beyond message authorship, revisions, quote timestamps and model calls.
+- No audit log beyond message authorship, revisions, quote timestamps, model calls and payment
+  attempts.
 - Model calls are single-attempt: an invalid answer costs one click and returns `422`; the studio
   prices by hand. No automatic repair prompt or retry, so failures stay visible in the evidence table.
 - `features` come back as free strings; codes that are not capabilities appear under
   "asked for but not offered" instead of being mapped silently.
+- Payments are sandbox-only. There are no webhooks: an unclear capture is resolved by the seller
+  pressing **Verify with PayPal** or the client refreshing the payment page, so a quote can stay
+  `PAYMENT_LOCKED` until someone acts.
+- No refunds, partial captures or unattended reconciliation job. `PAYPAL_MERCHANT_ID` is optional; when
+  unset only amount and currency are verified, not the payee.
 - The demo price list is fictional; it is a product fixture, not a market rate.
 
 ## License
