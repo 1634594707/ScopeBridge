@@ -1,61 +1,128 @@
-# ScopeBridge 开发清单与接口约定
+# ScopeBridge 开发记录
 
-v2.0 · 与 PROJECT_PLAN.md 配套 · 以下为计划接口，不是现有 API
+**本文记录当前实现，随代码更新。** 规划与验收标准在 `FORMAL_PROPOSAL.md`（v3.0）；开工前的旧基线已归档到
+`archive/PROJECT_PLAN-v2.md`；给评委的英文入口是根 `README.md`。
 
-## 目录与环境
+## 里程碑状态
 
-建议目录为 frontend/src、backend/app、backend/tests、evals、docs。backend/app 下按 requirements、proposals、quotes、payments 划分业务文件，不提前拆分服务。开始开发时选择兼容的稳定依赖并提交锁文件，不使用未核验的 latest 版本号。
+| 里程碑 | 内容 | 状态 |
+| --- | --- | --- |
+| M0 | 脚手架：uv + FastAPI + SQLAlchemy/Alembic、Vite/React/Tailwind、Docker PostgreSQL、健康检查 | 完成 |
+| M1 | 纯函数定价与可行性验证器 + 五个固定案例 | 完成 |
+| M2 | 需求/方案/报价/审核/确认，权限与版本冲突 | 完成 |
+| M3 | 模型接入：只抽事实，服务端生成并定价候选方案 | 完成 |
+| M4 | PayPal 沙箱创建、批准、捕获与恢复 | 完成（真实沙箱已跑通一笔 $500） |
+| M5 | 版本差异、结构化改需求、19 案例双链路评测 | 完成（真实用户试用未做） |
+| M6 | 干净环境复现、演示视频、提交材料 | 待办 |
 
-环境模板包括 DATABASE_URL、MODEL_API_KEY、MODEL_NAME、PAYPAL_CLIENT_ID、PAYPAL_CLIENT_SECRET、PAYPAL_BASE_URL、APP_BASE_URL、SESSION_SECRET。沙箱基址固定在服务端允许列表中。依赖启动指令在脚手架完成后写入根 README，本文不提供尚不存在的启动命令。
+## 目录与模块
 
-## 最小数据契约
+```
+backend/app/
+  core/           配置、数据库会话、统一错误体、口令哈希
+  accounts/       卖家会话、登录限流、CSRF
+  service_rules/  不可变服务规则版本
+  requirements/   需求与修订消息（expected_revision CAS）
+  proposals/      候选方案（程序定价与裁决，每修订最多两个）
+  quotes/         报价版本、行项、状态机
+  payments/       支付尝试、核验、恢复、订单快照
+  paypal/         Orders v2 适配器（唯一发出外部 HTTP 的地方）
+  ai/             模型客户端、提示词、事实校验、候选构造
+  rules/          纯函数定价与可行性，零 IO
+frontend/src/     pages/、components/、lib/{api,types,format}
+evals/            cases.json、run_eval.py、metrics.py、reports/
+```
 
-| 实体 | 核心字段与约束 |
-|---|---|
-| ServiceRuleVersion | 不可变规则 JSON、币种、价格、服务能力、工期条件 |
-| Requirement 与 Message | 归属、原始消息、预算、日期、素材条件、修订号 |
-| Proposal | 需求修订号、规则版本、包含项、排除项、取舍、校验结果 |
-| QuoteVersion 与 QuoteItem | 版本、金额、消息及规则引用、审核与确认时间、状态 |
-| PaymentAttempt | 报价 ID、操作请求标识、PayPal order ID、capture ID、状态 |
-| OrderSnapshot | 已支付报价快照、支付关联、创建时间；每笔成功支付唯一 |
+## 环境变量
 
-模型输出为 requirement_fields、missing_questions、candidate_scopes、source_message_ids。价格字段即使存在也不作为业务金额。验证器返回 feasible、violations、computed_items、total_minor、currency。未知规则、虚构来源、负数数量、非法币种或缺少条件均拒绝放行。
+`.env`（不入库）至少包含：`DATABASE_URL`、`SESSION_SECRET`、`SELLER_PASSWORD`、`MODEL_BASE_URL`、
+`MODEL_API_KEY`、`MODEL_NAME`、`PAYPAL_CLIENT_ID`、`PAYPAL_CLIENT_SECRET`、`PAYPAL_BASE_URL`、
+`APP_BASE_URL`。可选：`PAYPAL_MERCHANT_ID`、`PAYPAL_TIMEOUT_SECONDS`、`ARGON2_MEMORY_COST`。
 
-## API 草案
+`APP_BASE_URL` 必须与浏览器实际打开的地址一致（预览 4173 / 开发 5173）：PayPal 会把买家送回
+`{APP_BASE_URL}/pay/{attempt_id}`。
 
-| 方法与路径 | 作用与权限 |
-|---|---|
-| POST /api/session | 服务者登录；限制尝试次数 |
-| GET /api/service-rules | 读取可报价规则 |
-| POST /api/requirements | 建立客户需求和受限访问权限 |
-| POST /api/requirements/{id}/messages | 添加原文，携带 expected_revision |
-| POST /api/requirements/{id}/proposals | 生成并验证最多两方案 |
-| POST /api/requirements/{id}/quotes | 从可行方案生成报价草稿 |
-| POST /api/quotes/{id}/review | 仅服务者，审核当前版本 |
-| POST /api/quotes/{id}/confirm | 客户确认已审核且未过期版本 |
-| POST /api/quotes/{id}/payment-attempts | 锁定确认版本，创建或返回已有支付 |
-| POST /api/payments/{id}/capture | 校验归属及报价状态后执行捕获 |
-| POST /api/payments/{id}/reconcile | 查询原支付并更新本地状态 |
-| GET /api/orders/{id} | 读取授权范围内订单和快照 |
+## 数据模型（实际）
 
-支付写操作携带 Idempotency-Key；同键不同请求体返回冲突。后端将业务键持久化映射到 PayPal 请求标识，创建与捕获分别保存。并发修改使用 expected_revision，冲突返回 409。未认证返回 401，无资源权限返回 403，输入不合法返回 422。外部结果未知返回可恢复的处理中状态，前端不得当作已支付。Cookie 会话写操作增加 CSRF 防护。
+| 表 | 要点 |
+| --- | --- |
+| `service_rule_versions` | 不可变规则 JSON：基础页价、加页价、加项目录、能力列表、排除项、交期 |
+| `requirements` / `requirement_messages` | 单需求一条 portal token（仅存哈希）；消息带预算、交期、素材状态、修订号 |
+| `proposals` | 方案与规则版本绑定，含包含项、排除项、校验结果 |
+| `quote_versions` / `quote_items` | 版本号、行项、`rule_ref`、来源消息、审核与确认时间、状态 |
+| `payment_attempts` | 幂等键、PayPal order/capture id、状态、`retry_count`、人工结案人与依据 |
+| `order_snapshots` | 每笔成功支付唯一；与 `PAID` 同一事务写入，之后不可改 |
+| `ai_extractions` | 每次模型调用：模型名、提示词版本、输入消息 id、原始输出、解析结果、错误码、耗时 |
 
-## 状态与恢复
+## API（当前实现）
 
-报价：DRAFT → REVIEWED → CONFIRMED → PAYMENT_LOCKED → PAID。审核修改产生新草稿；开始支付前的变更使旧版本 SUPERSEDED。PAYMENT_LOCKED 只有在服务端核实没有成功支付且旧操作不能继续执行后才解锁；无法判断时保留锁定供核验。
+| 方法与路径 | 权限 |
+| --- | --- |
+| `POST/GET/DELETE /api/session` | 卖家 |
+| `GET /api/service-rules` | 公开 |
+| `POST /api/requirements` | 公开（一次性返回 portal token） |
+| `GET /api/requirements`、`GET /api/requirements/{id}` | 卖家 |
+| `POST /api/requirements/{id}/messages` | 卖家（CSRF） |
+| `POST /api/requirements/{id}/proposals` | 卖家（CSRF） |
+| `POST /api/requirements/{id}/extractions`、`GET .../latest` | 卖家（CSRF） |
+| `POST /api/requirements/{id}/quotes` | 卖家（CSRF） |
+| `POST /api/quotes/{id}/review` | 卖家（CSRF） |
+| `GET /api/portal`、`POST /api/portal/messages` | 客户令牌 |
+| `POST /api/portal/proposals/{id}/select` | 客户令牌 |
+| `POST /api/portal/quotes/{id}/confirm` | 客户令牌 |
+| `POST /api/portal/quotes/{id}/payment-attempts` | 客户令牌 + `Idempotency-Key` |
+| `GET /api/portal/payments/{id}`、`POST .../capture` | 客户令牌 |
+| `POST /api/payments/{id}/reconcile` / `/retry-create` / `/close` | 卖家（CSRF） |
+| `GET /api/requirements/{id}/payments`、`/order` | 卖家 |
+| `GET /api/orders/{id}` | 卖家 |
+| `GET /api/health` | 公开 |
 
-支付：CREATING → AWAITING_APPROVAL → CAPTURING → COMPLETED。任何外部操作结果不明进入 RECONCILING；查询已完成则写订单，明确待批准则恢复批准流程，明确失败才进入 FAILED。客户端 cancel 记录为交互事件，不直接解除支付锁。
+错误体统一为 `{code, message, details?}`；写操作带 `Idempotency-Key` 与 `expected_revision`，冲突返回 `409`。
 
-同一报价最多一个活动支付尝试，PayPal order ID 与 capture ID 分别唯一；COMPLETED 和订单快照在同一事务保存。数据库异常发生在外部扣款之后时，下次核验能补写本地记录。已完成状态不可被较旧查询结果覆盖。
+## 状态机与恢复
 
-## 开发顺序与完成定义
+- 报价：`DRAFT → REVIEWED → CONFIRMED → PAYMENT_LOCKED → PAID`，修订变更使草稿 `SUPERSEDED`。
+  解锁只有两条路径：服务端核验出「确定未成功捕获」，或卖家核对 PayPal 后人工结案。
+- 支付：`CREATING → AWAITING_APPROVAL → CAPTURING → COMPLETED`；结果不明进入 `RECONCILING`；
+  确定失败进入 `FAILED`；人工结案进入 `ABANDONED`。
+- 创建无回执：同 `PayPal-Request-Id` 重试，最多 2 次；仍失败则人工结案（需勾选已核对 + ≥10 字依据，
+  记录结案人与时间）。
+- 捕获响应丢失：查询原订单，`COMPLETED` 补写快照，`APPROVED` 恢复捕获，`VOIDED/EXPIRED` 判失败。
 
-- [ ] M0：完成五个样例、服务规则、仓库结构、环境模板和健康检查。验收：前后端连通数据库，密钥未被 Git 跟踪。
-- [ ] M1：实现纯函数价格与可行性验证器。验收：三页为 70000 美分，50000 预算不放行，单页外链与站内点单明确区分。
-- [ ] M2：实现手动草稿、审核、确认、归属权限和版本冲突。验收：未经审核、越权或旧版本无法确认。
-- [ ] M3：接模型提取、候选方案和依据映射。验收：无效输出不进入付款，每项引用可追溯；无解可人工处理。
-- [ ] M4：实现真实沙箱创建、捕获与恢复。验收：重复请求、客户端取消、捕获响应丢失、数据库补写分别覆盖。
-- [ ] M5：完成对比、差异、订单页面，跑 20 案例评测并开展用户试用。
-- [ ] M6：干净环境复现、视频、许可证与提交材料。验收：所有对外指标均能对应测试记录。
+## 模型契约
 
-每个里程碑完成后记录变更、已验证事项及未完成项；失败先修复再进入下一阶段。当前里程碑均未完成。
+- 提示词版本：`facts-v7`。模型只返回五个键：`pages`、`budget_usd`、`deadline_days`、`assets_ready`、
+  `features`；`extra="forbid"`，散文、代码围栏、多余键一律 `422`。
+- **契约必须随用户消息一起发送**：实测该网关不传达 system 消息，模型只看到简报就会自造 schema。
+  改提示词措辞无效，改通道才有效（解析率 47% → 100%）。
+- 候选方案由 `app/ai/candidates.py` 构造，`app/rules` 定价；模型的金额一律丢弃。
+
+## 评测
+
+19 个规则级案例（`evals/cases.json`）+ 1 个流程级案例（由接口测试覆盖）。`evals/metrics.py` 定义口径：
+所有比例以「调用次数」为分母，管线的不安全放行由运行期重新复算得到，不做硬编码。
+
+```bash
+cd backend
+uv run python ../evals/run_eval.py --runs 1 --workers 1 --timeout 90 --pause 1 --tag <label>
+```
+
+报告落在 `evals/reports/<时间戳>[-<tag>].{json,md}`。
+
+## 与初版计划的偏差
+
+| 计划 | 实际 | 原因 |
+| --- | --- | --- |
+| 模型输出候选方案 + 依据 | 模型只出事实，服务端构造候选 | 嵌套输出在该网关上不稳定；组合判断本质是规则问题 |
+| 支付端点挂在 `/api/quotes/{id}/payment-attempts` | 挂在 `/api/portal/quotes/{id}/payment-attempts` | 发起者是客户，权限路径必须与客户身份一致 |
+| 客户端提交金额 | 请求体无金额字段 | 金额唯一来源是规则层 |
+| 评测每例 3 次 | 已记录为 1 次全量 | 网关超时导致多次尝试中断；报告已标注，未以多次结果充数 |
+
+## 提交前的验证命令
+
+```bash
+cd backend && uv run pytest -q && uv run ruff check .
+cd frontend && pnpm exec tsc -b && pnpm exec vite build
+npx tsx .agents/skills/write-notes-like-deepseek/scripts/verify-agent-note-tree.ts
+npx tsx .agents/skills/write-notes-like-deepseek/scripts/verify-agent-note-format.ts
+```

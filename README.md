@@ -2,14 +2,15 @@
 
 **An agreement desk for studio work.** ScopeBridge turns an ambiguous client request into a priced,
 rule-checked scope, then carries the exact same version through studio review, client confirmation
-and (from M4) a PayPal sandbox payment.
+and a PayPal sandbox payment.
 
 The product is built around one idea: **the model may propose, but only a program prices, only a
 human reviews, and only the client confirms.** Every line on a quote points back to the rule that
 priced it and the client message that justified it.
 
-> 中文设计文档：`docs/FORMAL_PROPOSAL.md`（正式方案）、`docs/DEVELOPMENT.md`（接口与里程碑）、
-> `docs/architecture.html` / `docs/workflow.html`（架构图与流程图）。界面文案为英文。
+> 中文文档索引：`docs/README.md`。正式方案 `docs/FORMAL_PROPOSAL.md`、开发记录 `docs/DEVELOPMENT.md`、
+> 演示脚本 `docs/DEMO_SCRIPT.md`、图表 `docs/architecture.html` / `docs/workflow.html`、历史文档
+> `docs/archive/`。界面文案为英文。
 
 ![Landing page](docs/screenshots/01-landing.png)
 
@@ -34,7 +35,7 @@ message after that creates a new revision and supersedes open drafts — never e
 
 ---
 
-## What is implemented (M0–M4)
+## What is implemented (M0–M5)
 
 - **Versioned service rules** — base page, extra pages, add-ons, capability list, exclusions and
   lead time are stored as an immutable rule version; historical quotes keep their original numbers.
@@ -70,9 +71,37 @@ message after that creates a new revision and supersedes open drafts — never e
 - **Local-first operation** — PostgreSQL in Docker, single operator account; the model and PayPal are
   the only external services, and the manual path works without the model.
 
-Not implemented yet (planned, see `docs/FORMAL_PROPOSAL.md`): evaluation suite at 20 cases (M5),
-demo video and submission material (M6); refunds, partial captures and unattended reconciliation are
-out of scope for the hackathon build.
+Not implemented yet (planned, see `docs/FORMAL_PROPOSAL.md`): clean-environment reproduction, demo
+video and submission material (M6), plus a real user trial; refunds, partial captures and unattended
+reconciliation are out of scope for the hackathon build.
+
+| Milestone | Scope | State |
+| --- | --- | --- |
+| M0 | scaffolding, database, health check | done |
+| M1 | pure-function pricing and feasibility | done |
+| M2 | requirement → scope → quote → review → confirm | done |
+| M3 | model extraction (facts only), server-built options | done |
+| M4 | PayPal sandbox create / approve / capture / recovery | done (one real $500.00 payment) |
+| M5 | version diff, structured change requests, 19-case evaluation | done (user trial not run) |
+| M6 | clean-environment reproduction, video, submission | pending |
+
+## Repository map
+
+```text
+ScopeBridge/
+├─ README.md            English entry point (this file)
+├─ REQUIREMENTS.md      hackathon rules this project must satisfy
+├─ AGENTS.md            agent rules for this repository
+├─ docker-compose.yml   isolated PostgreSQL 18 (host port 55433)
+├─ backend/             FastAPI app, rules layer, alembic migrations, pytest
+├─ frontend/            Vite + React + TypeScript + Tailwind
+├─ evals/               cases.json, run_eval.py, metrics.py, reports/
+├─ docs/                Chinese design docs, diagrams, demo script, screenshots
+└─ .agents/             skills and decision notes (implemented / proposed / archived)
+```
+
+- `evals/reports/` keeps every run behind the numbers quoted in this README.
+- `.agents/notes/implemented/` keeps the decision notes referenced from the docs.
 
 | Payment on the client portal | Payment history in the console |
 | --- | --- |
