@@ -34,7 +34,7 @@ message after that creates a new revision and supersedes open drafts — never e
 
 ---
 
-## What is implemented (M0–M2)
+## What is implemented (M0–M3)
 
 - **Versioned service rules** — base page, extra pages, add-ons, capability list, exclusions and
   lead time are stored as an immutable rule version; historical quotes keep their original numbers.
@@ -48,12 +48,19 @@ message after that creates a new revision and supersedes open drafts — never e
   message references; `DRAFT → REVIEWED → CONFIRMED`, with `SUPERSEDED` on change.
 - **Two identity paths** — seller session cookie + CSRF for writes; customer bearer token scoped to
   one requirement.
-- **Local-first operation** — PostgreSQL in Docker, single operator account, no external services
-  required to run the demo.
+- **Model draft (facts only)** — one click sends the brief to an OpenAI-compatible model, which
+  returns five facts (`pages`, `budget_usd`, `deadline_days`, `assets_ready`, `features`). The studio
+  turns those facts into at most two options and prices them; the model never supplies an amount.
+  Every call is stored in `ai_extractions` with model, prompt version, raw output, latency and error.
+- **Local-first operation** — PostgreSQL in Docker, single operator account; the model is the only
+  external service, and the manual path works without it.
 
-Not implemented yet (planned, see `docs/FORMAL_PROPOSAL.md`): AI extraction and proposal drafting
-(M3), PayPal sandbox create/capture/reconcile (M4), evaluation suite at 20 cases (M5), demo video and
-submission material (M6).
+Not implemented yet (planned, see `docs/FORMAL_PROPOSAL.md`): PayPal sandbox create/capture/reconcile
+(M4), evaluation suite at 20 cases (M5), demo video and submission material (M6).
+
+| Model draft | Options it produced |
+| --- | --- |
+| ![Model draft](docs/screenshots/07-model-draft.png) | ![Model options](docs/screenshots/08-model-options.png) |
 
 ---
 
@@ -70,6 +77,7 @@ flowchart LR
         R["api router"]
         AUTH["accounts: session + portal token"]
         REQ["requirements"]
+        AI["ai: fact extraction"]
         PROP["proposals"]
         QUOTE["quotes: state machine"]
         RULES["rules: pure functions"]
@@ -84,24 +92,49 @@ flowchart LR
     C --> R
     R --> AUTH
     R --> REQ
+    R --> AI
     R --> PROP
     R --> QUOTE
     R --> SR
+    AI --> RULES
     PROP --> RULES
     QUOTE --> RULES
     AUTH --> DB
+    AI --> DB
     REQ --> DB
     PROP --> DB
     QUOTE --> DB
     SR --> DB
-    PROP -.-> LLM
+    AI -.-> LLM
     QUOTE -.-> PG
 ```
 
 Dependency direction is one-way: `router → service → rules/models`. `app/rules/` has no database,
-network or clock access — `today` is passed in — so the same functions will judge model output in M3.
+network or clock access — `today` is passed in — so model output passes through the same functions as
+a hand-typed scope.
 
 Money is always integer minor units (cents) in USD. The client never sends an amount.
+
+### Model boundary: facts, not proposals
+
+The model returns a five-key fact sheet and nothing else. Anything out of shape is rejected whole and
+recorded, never coerced:
+
+```
+{"pages": 3, "budget_usd": 500, "deadline_days": 14,
+ "assets_ready": false, "features": ["landing_pages", "online_ordering"]}
+```
+
+`app/ai/candidates.py` then builds at most two options — "As briefed" and, when that fails, a
+one-page scope that keeps only capabilities the studio actually offers — and `app/rules` prices both.
+`budget_usd` from the model is displayed as "what the model read"; the authoritative budget comes from
+the stored client message.
+
+Measured against this gateway (2026-10-30, `deepseek-v4.1-flash`): asking for a nested object with
+candidate scopes matched the schema 0/5 times, `response_format: json_schema` was accepted but not
+enforced, and a persona-style prompt produced prose every time. The five-key sheet with a plain-text
+brief succeeded 5/5 at 2.1–3.2 s. Reasoning and rejected options:
+`.agents/notes/implemented/architecture/2026-10-30-model-boundary-facts-not-scopes.md`.
 
 ---
 
@@ -114,7 +147,8 @@ git clone git@github.com:1634594707/ScopeBridge.git
 cd ScopeBridge
 
 # 1) environment
-cp .env.example .env          # then set POSTGRES_PASSWORD, SESSION_SECRET, SELLER_PASSWORD
+cp .env.example .env          # then set DATABASE_URL, SESSION_SECRET, SELLER_PASSWORD
+                              # optional: MODEL_BASE_URL / MODEL_API_KEY / MODEL_NAME
 
 # 2) database (PostgreSQL 18 on port 55433, isolated from any local instance)
 docker compose up -d
@@ -146,8 +180,9 @@ pnpm exec vite preview        # http://127.0.0.1:4173
 1. **Client** — open `/start`, submit a brief. You land on a private portal `/r/<token>`.
 2. **Studio** — open `/signin`, use the seller credentials from `.env`
    (seed value in this repo's local `.env` is `seller@scopebridge.local` / `ScopeBridge-2026-demo`).
-3. Open the brief in `/console`, price a scope on the right, then **Draft quote** from the priced
-   option.
+3. Open the brief in `/console`. Optionally press **Draft with the model** to see the extracted facts
+   and two priced options; **Use this scope** copies one into the editor. Then **Price this scope**
+   and **Draft quote**.
 4. On the quote page press **Review and issue**.
 5. **Back as the client** — open the private link, choose the scope, press **Confirm this version**.
    The quote turns read-only.
@@ -166,6 +201,7 @@ Try an infeasible scope too: three pages against a $500 budget returns
 | `POST` | `/api/requirements` | public intake (creates the portal token once) |
 | `GET` | `/api/requirements` · `/api/requirements/{id}` | seller |
 | `POST` | `/api/requirements/{id}/messages` | seller (CSRF) |
+| `POST` | `/api/requirements/{id}/extractions` · `GET .../extractions/latest` | seller (CSRF) |
 | `POST` | `/api/requirements/{id}/proposals` | seller (CSRF) |
 | `POST` | `/api/requirements/{id}/quotes` | seller (CSRF) |
 | `POST` | `/api/quotes/{id}/review` | seller (CSRF) |
@@ -182,7 +218,7 @@ Errors are always `{"code", "message", "details?"}` — no stack traces, SQL or 
 
 ```bash
 cd backend
-uv run pytest -q            # 31 tests
+uv run pytest -q            # 40 tests
 uv run ruff check .
 ```
 
@@ -193,6 +229,8 @@ uv run ruff check .
 - `test_api_quote_flow.py` — intake → scope → select → quote → review → confirm, plus revision
   supersession.
 - `test_eval_cases.py` — replays the five fixed cases in `evals/cases/`.
+- `test_ai_extraction.py` — server-built options, model money ignored, prose/extra keys/out-of-range
+  pages rejected, evidence row written, empty latest draft returns `null`.
 
 Fixture cases live in `evals/` with their expected verdicts; changing a rule means updating the case
 first, not loosening the assertion.
@@ -211,6 +249,9 @@ first, not loosening the assertion.
   created, and a new revision supersedes open drafts.
 - **Decision notes** live in `.agents/notes/` (`implemented/architecture/`), including a STRIDE pass
   over sessions, portal tokens and CSRF. Workflow rules for this repo are in `AGENTS.md`.
+- **Model boundary**: `app/ai/client.py` is the only place that speaks HTTP to a model; failures are
+  surfaced as `502`, invalid shapes as `422`, and every attempt (including failures) is stored in
+  `ai_extractions` with its prompt version.
 - **Secrets** stay in `.env` (git-ignored). The PayPal sandbox credentials used during development are
   not part of the repository; only `.env.example` is tracked.
 
@@ -218,7 +259,11 @@ first, not loosening the assertion.
 
 - `POST /api/requirements` has no rate limit; add one before exposing the app publicly.
 - Quote immutability is enforced in the application layer, not by database triggers.
-- No audit log beyond message authorship, revisions and quote timestamps.
+- No audit log beyond message authorship, revisions, quote timestamps and model calls.
+- Model calls are single-attempt: an invalid answer costs one click and returns `422`; the studio
+  prices by hand. No automatic repair prompt or retry, so failures stay visible in the evidence table.
+- `features` come back as free strings; codes that are not capabilities appear under
+  "asked for but not offered" instead of being mapped silently.
 - The demo price list is fictional; it is a product fixture, not a market rate.
 
 ## License

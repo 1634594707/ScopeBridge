@@ -13,13 +13,24 @@ interface ScopeEditorProps {
   revision: number;
   rules: ServiceRules;
   usedAtThisRevision: number;
+  initialLabel?: string;
+  initialPages?: number;
+  initialAddons?: string[];
 }
 
-export function ScopeEditor({ requirementId, revision, rules, usedAtThisRevision }: ScopeEditorProps) {
+export function ScopeEditor({
+  requirementId,
+  revision,
+  rules,
+  usedAtThisRevision,
+  initialLabel = "",
+  initialPages = 1,
+  initialAddons = [],
+}: ScopeEditorProps) {
   const queryClient = useQueryClient();
-  const [label, setLabel] = useState("");
-  const [pages, setPages] = useState(1);
-  const [addons, setAddons] = useState<string[]>([]);
+  const [label, setLabel] = useState(initialLabel);
+  const [pages, setPages] = useState(initialPages);
+  const [addons, setAddons] = useState<string[]>(initialAddons);
   const [features, setFeatures] = useState<string[]>(["landing_pages"]);
   const [assetsReady, setAssetsReady] = useState(true);
 

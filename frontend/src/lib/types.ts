@@ -125,6 +125,51 @@ export interface PortalView {
   currency: string;
 }
 
+export interface ModelFacts {
+  pages: number | null;
+  budget_usd: number | null;
+  deadline_days: number | null;
+  assets_ready: boolean | null;
+  features: string[];
+}
+
+export interface ExtractionRecord {
+  revision: number;
+  budget_minor: number | null;
+  deadline: string | null;
+  assets_ready: boolean | null;
+}
+
+export interface PricedCandidate {
+  label: string;
+  pages: number;
+  addon_codes: string[];
+  requested_features: string[];
+  rationale: string;
+  feasible: boolean;
+  total_minor: number;
+  currency: string;
+  violations: Violation[];
+}
+
+export interface Extraction {
+  id: string;
+  model: string;
+  prompt_version: string;
+  latency_ms: number;
+  created_at: string;
+  facts: ModelFacts;
+  record: ExtractionRecord;
+  source_message_ids: string[];
+  unsupported_requests: string[];
+  questions: string[];
+  candidates: PricedCandidate[];
+}
+
+export interface ExtractionEnvelope {
+  extraction: Extraction | null;
+}
+
 export interface IntakeResponse {
   requirement_id: string;
   portal_token: string;

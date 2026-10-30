@@ -1,6 +1,8 @@
 import { readPortalToken } from "./customerToken";
 import type {
   ApiErrorBody,
+  Extraction,
+  ExtractionEnvelope,
   IntakeResponse,
   PortalView,
   Proposal,
@@ -111,6 +113,12 @@ export const api = {
   ) => request<Proposal>(`/requirements/${id}/proposals`, { method: "POST", body: payload }),
 
   proposals: (id: string) => request<Proposal[]>(`/requirements/${id}/proposals`),
+
+  requestExtraction: (id: string) =>
+    request<Extraction>(`/requirements/${id}/extractions`, { method: "POST" }),
+
+  latestExtraction: (id: string) =>
+    request<ExtractionEnvelope>(`/requirements/${id}/extractions/latest`),
 
   createQuote: (id: string, payload: { proposal_id: string; scope_summary?: string }) =>
     request<Quote>(`/requirements/${id}/quotes`, { method: "POST", body: payload }),

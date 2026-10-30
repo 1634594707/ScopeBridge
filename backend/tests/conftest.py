@@ -24,6 +24,7 @@ os.environ["DATABASE_URL"] = urlunsplit(_parts._replace(path="/" + TEST_DB_NAME)
 get_settings.cache_clear()
 
 from app.accounts import models as accounts_models  # noqa: E402,F401
+from app.ai import models as ai_models  # noqa: E402,F401
 from app.core.db import Base, SessionLocal, engine  # noqa: E402
 from app.proposals import models as proposals_models  # noqa: E402,F401
 from app.quotes import models as quotes_models  # noqa: E402,F401

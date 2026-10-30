@@ -8,6 +8,7 @@ import { Button } from "../components/Button";
 import { Card, CardHeader } from "../components/Card";
 import { Field, TextArea } from "../components/Field";
 import { MessageTimeline } from "../components/MessageTimeline";
+import { ModelDraftPanel } from "../components/ModelDraftPanel";
 import { Money } from "../components/Money";
 import { PageHeader } from "../components/PageHeader";
 import { ScopeEditor } from "../components/ScopeEditor";
@@ -19,6 +20,12 @@ export default function RequirementPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [reply, setReply] = useState("");
+  const [seed, setSeed] = useState<{
+    key: string;
+    label: string;
+    pages: number;
+    addons: string[];
+  } | null>(null);
 
   const requirement = useQuery({
     queryKey: ["requirement", id],
@@ -209,13 +216,29 @@ export default function RequirementPage() {
         </div>
 
         <aside className="flex flex-col gap-6">
+          <ModelDraftPanel
+            requirementId={id}
+            onUse={(candidate) =>
+              setSeed({
+                key: `${candidate.label}-${candidate.total_minor}-${Date.now()}`,
+                label: candidate.label,
+                pages: candidate.pages,
+                addons: candidate.addon_codes,
+              })
+            }
+          />
+
           <Card className="px-5 py-5">
             {rules.data ? (
               <ScopeEditor
+                key={seed?.key ?? "manual"}
                 requirementId={id}
                 revision={brief.revision}
                 rules={rules.data}
                 usedAtThisRevision={currentProposals.length}
+                initialLabel={seed?.label}
+                initialPages={seed?.pages}
+                initialAddons={seed?.addons}
               />
             ) : (
               <p className="text-[13px] text-ink-faint">Loading the price list…</p>

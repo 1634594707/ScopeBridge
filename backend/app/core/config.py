@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     model_base_url: str = ""
     model_api_key: str = ""
     model_name: str = ""
+    model_timeout_seconds: float = 60.0
 
     paypal_env: str = "sandbox"
     paypal_base_url: str = "https://api-m.sandbox.paypal.com"

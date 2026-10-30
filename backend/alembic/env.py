@@ -8,6 +8,7 @@ from sqlalchemy import engine_from_config, pool
 
 from alembic import context
 from app.accounts import models as accounts_models  # noqa: F401
+from app.ai import models as ai_models  # noqa: F401
 from app.core.config import get_settings
 from app.core.db import Base
 from app.proposals import models as proposals_models  # noqa: F401
