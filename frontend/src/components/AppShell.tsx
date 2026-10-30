@@ -3,6 +3,7 @@ import { Link, NavLink } from "react-router-dom";
 import { ClipboardList, FilePlus2, ReceiptText } from "lucide-react";
 import { cn } from "../lib/cn";
 import { useSession } from "../hooks/useSession";
+import { BrandTile } from "./BrandMark";
 
 const navItems = [
   { to: "/console", label: "Console", icon: ClipboardList },
@@ -13,9 +14,7 @@ const navItems = [
 function Mark() {
   return (
     <div className="flex items-center gap-2.5">
-      <span className="flex h-8 w-8 items-center justify-center rounded-sm bg-pine font-mono text-[12px] font-semibold text-ink-invert">
-        SB
-      </span>
+      <BrandTile />
       <span className="flex flex-col leading-none">
         <span className="text-[15px] font-semibold tracking-[-0.02em] text-ink">ScopeBridge</span>
         <span className="mt-1 font-mono text-[10px] uppercase tracking-[0.16em] text-ink-faint">

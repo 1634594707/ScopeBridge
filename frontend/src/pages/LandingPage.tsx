@@ -1,6 +1,7 @@
 import { ArrowRight, FileCheck2, GitCompareArrows, ScanSearch } from "lucide-react";
 import { Link } from "react-router-dom";
 import { Button } from "../components/Button";
+import { BrandMark } from "../components/BrandMark";
 import { Money } from "../components/Money";
 import { RuleChip } from "../components/Tag";
 import { StatusPill } from "../components/StatusPill";
@@ -49,8 +50,8 @@ export default function LandingPage() {
     <div className="flex flex-col gap-20 pb-16">
       <section className="grid items-start gap-10 lg:grid-cols-[1.15fr_0.85fr] lg:gap-14">
         <div className="flex flex-col gap-7 pt-4">
-          <div className="flex items-center gap-3">
-            <span className="h-px w-8 bg-pine" />
+          <div className="flex items-center gap-2.5">
+            <BrandMark className="h-5 w-5 text-pine" />
             <span className="label">ScopeBridge · agreement desk for studio work</span>
           </div>
 

@@ -1,5 +1,7 @@
 # ScopeBridge
 
+<p><img src="frontend/public/logo-mark.svg" width="64" height="64" alt="ScopeBridge logo" /></p>
+
 **An agreement desk for studio work.** ScopeBridge turns an ambiguous client request into a priced,
 rule-checked scope, then carries the exact same version through studio review, client confirmation
 and a PayPal sandbox payment.
@@ -102,6 +104,7 @@ ScopeBridge/
 
 - `evals/reports/` keeps every run behind the numbers quoted in this README.
 - `.agents/notes/implemented/` keeps the decision notes referenced from the docs.
+- `frontend/public/` keeps the brand assets: `favicon.svg` (tab tile) and `logo-mark.svg` (standalone mark).
 
 | Payment on the client portal | Payment history in the console |
 | --- | --- |
