@@ -1,0 +1,21 @@
+{
+  "id": "case-03-unsupported-feature",
+  "title": "On-site ordering requested as if it were a normal add-on",
+  "kind": "validation",
+  "notes": "A capability the practice does not offer must be refused, not silently dropped.",
+  "input": {
+    "pages": 1,
+    "addon_codes": [],
+    "requested_features": ["landing_pages", "on_site_ordering"],
+    "assets_ready": true,
+    "budget_minor": 50000,
+    "deadline": "2026-11-30",
+    "today": "2026-10-30"
+  },
+  "expected": {
+    "feasible": false,
+    "total_minor": 50000,
+    "violation_codes": ["capability_unavailable"],
+    "missing_fields": []
+  }
+}

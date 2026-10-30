@@ -1,0 +1,139 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "ScopeBridge 技术架构",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "viewBox": [
+      1200,
+      650
+    ]
+  },
+  "components": [
+    {
+      "id": "browser",
+      "type": "frontend",
+      "label": "React + TypeScript",
+      "sublabel": "需求 · 方案对比 · 确认",
+      "pos": [
+        40,
+        275
+      ],
+      "size": [
+        230,
+        76
+      ]
+    },
+    {
+      "id": "app",
+      "type": "backend",
+      "label": "Python + FastAPI",
+      "sublabel": "Pydantic · 权限 · 状态机",
+      "pos": [
+        380,
+        275
+      ],
+      "size": [
+        230,
+        76
+      ]
+    },
+    {
+      "id": "db",
+      "type": "database",
+      "label": "PostgreSQL",
+      "sublabel": "报价版本 · 支付记录",
+      "pos": [
+        830,
+        275
+      ],
+      "size": [
+        230,
+        76
+      ]
+    },
+    {
+      "id": "ai",
+      "type": "external",
+      "label": "AI 模型 API",
+      "sublabel": "提取 · 澄清 · 方案提议",
+      "pos": [
+        380,
+        50
+      ],
+      "size": [
+        230,
+        76
+      ]
+    },
+    {
+      "id": "price",
+      "type": "backend",
+      "label": "规则验证模块",
+      "sublabel": "约束 · 定价 · 来源引用",
+      "pos": [
+        830,
+        50
+      ],
+      "size": [
+        230,
+        76
+      ]
+    },
+    {
+      "id": "pay",
+      "type": "external",
+      "label": "PayPal 沙箱",
+      "sublabel": "创建 · 捕获 · 查询",
+      "pos": [
+        380,
+        500
+      ],
+      "size": [
+        230,
+        76
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "id": "browser-app",
+      "from": "browser",
+      "to": "app",
+      "label": "HTTPS"
+    },
+    {
+      "id": "app-db",
+      "from": "app",
+      "to": "db",
+      "label": "读写",
+      "labelAt": [
+        760,
+        330
+      ]
+    },
+    {
+      "id": "app-ai",
+      "from": "app",
+      "to": "ai",
+      "label": "结构化输出"
+    },
+    {
+      "id": "app-price",
+      "from": "app",
+      "to": "price",
+      "label": "调用计算"
+    },
+    {
+      "id": "app-pay",
+      "from": "app",
+      "to": "pay",
+      "label": "服务端 API",
+      "labelAt": [
+        495,
+        425
+      ]
+    }
+  ]
+}

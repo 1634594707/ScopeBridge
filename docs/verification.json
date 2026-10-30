@@ -1,0 +1,71 @@
+[
+  {
+    "diagram_type": "architecture",
+    "validation": "9/9 showcase, 0 errors, 0 warnings",
+    "browser_evidence": "pass",
+    "visual_review": "passed",
+    "correction_rounds": 0,
+    "delivery_receipt": {
+      "schemaVersion": 1,
+      "ok": true,
+      "command": "deliver",
+      "type": "architecture",
+      "input": "D:\\Administrator\\Desktop\\bisai\\heikesong\\paypal\\docs\\architecture.json",
+      "output": "D:\\Administrator\\Desktop\\bisai\\heikesong\\paypal\\docs\\architecture.html",
+      "specification": {
+        "sha256": "21db26eab173cd6c316c3cc5919678cb77c57f9727c7de60f21d461ca057f51f",
+        "bytes": 2482
+      },
+      "artifact": {
+        "sha256": "ea94c0732771abc660a95a013701c18756616f94cb449342522181ca59f487d1",
+        "bytes": 801988
+      },
+      "validation": {
+        "checksPassed": 9,
+        "checkCount": 9,
+        "compositionProfile": "showcase",
+        "compositionStatus": "pass",
+        "errors": 0,
+        "warnings": 0
+      }
+    }
+  },
+  {
+    "diagram_type": "workflow",
+    "validation": "9/9 showcase, 0 errors, 0 warnings",
+    "browser_evidence": "pass",
+    "visual_review": "passed",
+    "correction_rounds": 0,
+    "delivery_receipt": {
+      "schemaVersion": 1,
+      "ok": true,
+      "command": "deliver",
+      "type": "workflow",
+      "input": "D:\\Administrator\\Desktop\\bisai\\heikesong\\paypal\\docs\\workflow.json",
+      "output": "D:\\Administrator\\Desktop\\bisai\\heikesong\\paypal\\docs\\workflow.html",
+      "specification": {
+        "sha256": "bfa20cf035bf696202a89cbd48f80fd327c70a6a61124fd202a63e956c38bef0",
+        "bytes": 4009
+      },
+      "artifact": {
+        "sha256": "bffe49101b0ee9fdecb0506eefc3925a7941b49e8bf7d143c9ee81ce607e0095",
+        "bytes": 808801
+      },
+      "validation": {
+        "checksPassed": 9,
+        "checkCount": 9,
+        "compositionProfile": "showcase",
+        "compositionStatus": "pass",
+        "errors": 0,
+        "warnings": 0
+      }
+    }
+  },
+  {
+    "document": "FORMAL_PROPOSAL.html",
+    "sha256": "d10b39a3882666226de8f07d0ca39dbcbd4636c105a01a3fb873f20617efecf5",
+    "sections": 17,
+    "embedded_diagrams": 2,
+    "visual_review": "passed"
+  }
+]

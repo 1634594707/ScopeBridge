@@ -1,0 +1,44 @@
+# 凭据：绝不入库
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# 运行时数据
+data/
+*.db
+*.db-journal
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+ruff_cache/
+.coverage
+htmlcov/
+
+# Node / 前端构建产物
+node_modules/
+dist/
+.vite/
+.vite-cache/
+*.tsbuildinfo
+coverage/
+
+# 编辑器
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# 演示产物
+*.log
+!samples/*.txt
+!evals/**/*.json
+
+# 图表校验时生成的浏览器配置目录
+docs/.chrome-review*/

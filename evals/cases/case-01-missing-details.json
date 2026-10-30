@@ -1,0 +1,21 @@
+{
+  "id": "case-01-missing-details",
+  "title": "Client did not state a budget or a deadline",
+  "kind": "validation",
+  "notes": "The validator must report what is missing instead of inventing numbers.",
+  "input": {
+    "pages": 1,
+    "addon_codes": [],
+    "requested_features": [],
+    "assets_ready": true,
+    "budget_minor": null,
+    "deadline": null,
+    "today": "2026-10-30"
+  },
+  "expected": {
+    "feasible": false,
+    "total_minor": 50000,
+    "violation_codes": [],
+    "missing_fields": ["budget_minor", "deadline"]
+  }
+}

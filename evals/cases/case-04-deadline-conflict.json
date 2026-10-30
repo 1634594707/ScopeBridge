@@ -1,0 +1,21 @@
+{
+  "id": "case-04-deadline-conflict",
+  "title": "Launch promised in six days without assets",
+  "kind": "validation",
+  "notes": "Assets missing adds a buffer before the five-day build window starts.",
+  "input": {
+    "pages": 1,
+    "addon_codes": [],
+    "requested_features": ["landing_pages"],
+    "assets_ready": false,
+    "budget_minor": 50000,
+    "deadline": "2026-11-05",
+    "today": "2026-10-30"
+  },
+  "expected": {
+    "feasible": false,
+    "total_minor": 50000,
+    "violation_codes": ["deadline_conflict"],
+    "missing_fields": []
+  }
+}

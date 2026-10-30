@@ -1,0 +1,21 @@
+services:
+  db:
+    image: postgres:18-alpine
+    container_name: scopebridge-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: scopebridge
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: scopebridge
+    ports:
+      - "55433:5432"
+    volumes:
+      - scopebridge-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scopebridge -d scopebridge"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  scopebridge-pgdata:

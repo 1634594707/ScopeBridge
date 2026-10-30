@@ -1,0 +1,16 @@
+{
+  "id": "case-05-change-request",
+  "title": "A new message arrives after a quote was drafted",
+  "kind": "flow",
+  "notes": "Covered by backend/tests/test_api_quote_flow.py::test_new_revision_supersedes_the_open_draft.",
+  "input": {
+    "initial_revision": 1,
+    "change_message": "We also need a contact form.",
+    "expected_revision_on_retry": 1
+  },
+  "expected": {
+    "new_revision": 2,
+    "open_quote_status": "SUPERSEDED",
+    "stale_write_status": 409
+  }
+}

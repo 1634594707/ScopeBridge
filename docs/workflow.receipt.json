@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "ok": true,
+  "command": "deliver",
+  "type": "workflow",
+  "input": "D:\\Administrator\\Desktop\\bisai\\heikesong\\paypal\\docs\\workflow.json",
+  "output": "D:\\Administrator\\Desktop\\bisai\\heikesong\\paypal\\docs\\workflow.html",
+  "specification": {
+    "sha256": "bfa20cf035bf696202a89cbd48f80fd327c70a6a61124fd202a63e956c38bef0",
+    "bytes": 4009
+  },
+  "artifact": {
+    "sha256": "bffe49101b0ee9fdecb0506eefc3925a7941b49e8bf7d143c9ee81ce607e0095",
+    "bytes": 808801
+  },
+  "validation": {
+    "checksPassed": 9,
+    "checkCount": 9,
+    "compositionProfile": "showcase",
+    "compositionStatus": "pass",
+    "errors": 0,
+    "warnings": 0
+  }
+}

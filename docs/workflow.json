@@ -1,0 +1,197 @@
+{
+  "schema_version": 2,
+  "diagram_type": "workflow",
+  "meta": {
+    "title": "ScopeBridge 成交流程",
+    "locale": "zh-CN",
+    "quality_profile": "showcase",
+    "legend": {
+      "entries": {
+        "backend": {
+          "label": "业务逻辑"
+        },
+        "security": {
+          "label": "人工审核"
+        },
+        "database": {
+          "label": "持久化"
+        }
+      }
+    }
+  },
+  "lanes": [
+    {
+      "id": "main",
+      "label": "需求与报价"
+    },
+    {
+      "id": "payment",
+      "label": "确认与支付"
+    },
+    {
+      "id": "exception",
+      "label": "异常与变更",
+      "variant": "exception"
+    }
+  ],
+  "nodes": [
+    {
+      "id": "input",
+      "lane": "main",
+      "col": 0,
+      "type": "frontend",
+      "label": "提交需求"
+    },
+    {
+      "id": "clarify",
+      "lane": "main",
+      "col": 1,
+      "type": "backend",
+      "label": "AI 澄清与提案",
+      "width": 140
+    },
+    {
+      "id": "quote",
+      "lane": "main",
+      "col": 2,
+      "type": "backend",
+      "label": "验证并选方案",
+      "width": 140
+    },
+    {
+      "id": "review",
+      "lane": "main",
+      "col": 3,
+      "type": "security",
+      "label": "服务者审核"
+    },
+    {
+      "id": "confirm",
+      "lane": "payment",
+      "col": 3,
+      "type": "frontend",
+      "label": "客户确认版本"
+    },
+    {
+      "id": "checkout",
+      "lane": "payment",
+      "col": 4,
+      "type": "external",
+      "label": "创建批准捕获",
+      "width": 140
+    },
+    {
+      "id": "paid",
+      "lane": "payment",
+      "col": 5,
+      "type": "database",
+      "label": "核验并记录已付"
+    },
+    {
+      "id": "change",
+      "lane": "exception",
+      "col": 2,
+      "type": "backend",
+      "label": "修改并重新报价"
+    },
+    {
+      "id": "pending",
+      "lane": "exception",
+      "col": 4,
+      "type": "backend",
+      "label": "取消或结果待核验",
+      "width": 160
+    }
+  ],
+  "edges": [
+    {
+      "id": "input-clarify",
+      "from": "input",
+      "to": "clarify",
+      "label": "提取",
+      "role": "main"
+    },
+    {
+      "id": "clarify-quote",
+      "from": "clarify",
+      "to": "quote",
+      "label": "信息完整",
+      "role": "main"
+    },
+    {
+      "id": "quote-review",
+      "from": "quote",
+      "to": "review",
+      "label": "可行方案",
+      "role": "main"
+    },
+    {
+      "id": "review-confirm",
+      "from": "review",
+      "to": "confirm",
+      "label": "审核通过",
+      "role": "main"
+    },
+    {
+      "id": "confirm-checkout",
+      "from": "confirm",
+      "to": "checkout",
+      "label": "确认当前版本",
+      "role": "main"
+    },
+    {
+      "id": "checkout-paid",
+      "from": "checkout",
+      "to": "paid",
+      "label": "捕获成功且核验通过",
+      "role": "main"
+    },
+    {
+      "id": "confirm-change",
+      "from": "confirm",
+      "to": "change",
+      "label": "要求修改",
+      "role": "branch"
+    },
+    {
+      "id": "change-clarify",
+      "from": "change",
+      "to": "clarify",
+      "label": "新版本",
+      "role": "branch"
+    },
+    {
+      "id": "checkout-pending",
+      "from": "checkout",
+      "to": "pending",
+      "label": "取消或超时",
+      "role": "branch"
+    },
+    {
+      "id": "pending-checkout",
+      "from": "pending",
+      "to": "checkout",
+      "label": "查询后恢复",
+      "role": "branch"
+    }
+  ],
+  "mainPath": [
+    "input",
+    "clarify",
+    "quote",
+    "review",
+    "confirm",
+    "checkout",
+    "paid"
+  ],
+  "cards": [
+    {
+      "dot": "amber",
+      "title": "放行条件",
+      "items": [
+        "缺项先澄清；无可行方案则人工处理",
+        "人工审核后客户确认；付款中锁定版本"
+      ]
+    }
+  ]
+}

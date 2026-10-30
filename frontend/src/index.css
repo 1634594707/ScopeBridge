@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+
+  html {
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-paper text-ink font-sans antialiased;
+    background-image:
+      radial-gradient(circle at 12% -10%, rgba(15, 76, 69, 0.07), transparent 46%),
+      radial-gradient(circle at 92% 0%, rgba(180, 112, 11, 0.06), transparent 40%);
+    background-attachment: fixed;
+  }
+
+  ::selection {
+    @apply bg-pine-wash text-pine-deep;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-pine/40 ring-offset-2 ring-offset-paper;
+  }
+}
+
+@layer components {
+  .surface {
+    @apply rounded-lg border border-line bg-paper-card;
+  }
+
+  .hairline {
+    @apply h-px w-full bg-line;
+  }
+
+  .label {
+    @apply font-mono text-[11px] uppercase tracking-[0.16em] text-ink-faint;
+  }
+
+  .numeric {
+    @apply font-mono tabular-nums;
+  }
+}
