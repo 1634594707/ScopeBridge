@@ -177,6 +177,9 @@ cd ScopeBridge
 # 1) environment
 cp .env.example .env          # then set DATABASE_URL, SESSION_SECRET, SELLER_PASSWORD
                               # optional: MODEL_BASE_URL / MODEL_API_KEY / MODEL_NAME
+                              # APP_BASE_URL must match the origin you open in the
+                              # browser (4173 for preview, 5173 for dev): PayPal
+                              # sends the buyer back to that exact address.
 
 # 2) database (PostgreSQL 18 on port 55433, isolated from any local instance)
 docker compose up -d
