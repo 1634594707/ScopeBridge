@@ -1,4 +1,4 @@
-"""Seller account, session and login-attempt tables."""
+"""User accounts (seller and client), shared sessions and login attempts."""
 
 from __future__ import annotations
 
@@ -10,6 +10,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.db import Base
 
+ROLE_SELLER = "SELLER"
+ROLE_CLIENT = "CLIENT"
+
 
 class User(Base):
     __tablename__ = "users"
@@ -18,13 +21,14 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
     display_name: Mapped[str] = mapped_column(String(120))
     password_hash: Mapped[str] = mapped_column(String(255))
+    role: Mapped[str] = mapped_column(String(20), default=ROLE_CLIENT, server_default=ROLE_CLIENT)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )
 
 
-class SellerSession(Base):
-    __tablename__ = "seller_sessions"
+class UserSession(Base):
+    __tablename__ = "user_sessions"
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))

@@ -37,6 +37,12 @@ class RequirementSummary(BaseModel):
     updated_at: datetime
 
 
+class SellerRequirementSummary(RequirementSummary):
+    """The seller list also says whether the brief may still be deleted."""
+
+    deletable: bool
+
+
 class RequirementDetail(BaseModel):
     requirement: RequirementSummary
     messages: list[MessageOut]
@@ -54,8 +60,7 @@ class IntakeRequest(BaseModel):
 
 class IntakeResponse(BaseModel):
     requirement_id: UUID
-    portal_token: str
-    portal_path: str
+    brief_path: str
 
 
 class AddMessageRequest(BaseModel):

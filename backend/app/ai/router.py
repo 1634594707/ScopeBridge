@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.ai import service
 from app.ai.schemas import ExtractionEnvelope, ExtractionOut
-from app.api.deps import SellerAuth, require_csrf, require_seller
+from app.api.deps import UserAuth, require_csrf, require_seller
 from app.core.db import get_db
 from app.requirements.service import load_for_seller
 
@@ -23,7 +23,7 @@ router = APIRouter(tags=["ai"])
 )
 def create_extraction(
     requirement_id: UUID,
-    auth: SellerAuth = Depends(require_csrf),
+    auth: UserAuth = Depends(require_csrf),
     db: Session = Depends(get_db),
 ) -> ExtractionOut:
     requirement = load_for_seller(db, requirement_id, auth.user.id)
@@ -36,7 +36,7 @@ def create_extraction(
 )
 def read_latest_extraction(
     requirement_id: UUID,
-    auth: SellerAuth = Depends(require_seller),
+    auth: UserAuth = Depends(require_seller),
     db: Session = Depends(get_db),
 ) -> ExtractionEnvelope:
     requirement = load_for_seller(db, requirement_id, auth.user.id)

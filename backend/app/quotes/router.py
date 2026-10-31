@@ -1,4 +1,4 @@
-"""Quote endpoints for the seller console and the client portal."""
+"""Quote endpoints for the seller console and the client's brief pages."""
 
 from __future__ import annotations
 
@@ -7,13 +7,12 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import SellerAuth, require_csrf, require_customer, require_seller
+from app.api.deps import UserAuth, require_client_csrf, require_csrf, require_seller
 from app.core.db import get_db
 from app.core.errors import not_found
 from app.quotes import service
 from app.quotes.schemas import QuoteCreate, QuoteOut
-from app.requirements.models import Requirement
-from app.requirements.service import load_for_seller
+from app.requirements.service import load_for_client, load_for_seller
 
 router = APIRouter(tags=["quotes"])
 
@@ -26,7 +25,7 @@ router = APIRouter(tags=["quotes"])
 def create_quote(
     requirement_id: UUID,
     payload: QuoteCreate,
-    auth: SellerAuth = Depends(require_csrf),
+    auth: UserAuth = Depends(require_csrf),
     db: Session = Depends(get_db),
 ) -> QuoteOut:
     requirement = load_for_seller(db, requirement_id, auth.user.id)
@@ -37,7 +36,7 @@ def create_quote(
 @router.get("/requirements/{requirement_id}/quotes", response_model=list[QuoteOut])
 def list_quotes(
     requirement_id: UUID,
-    auth: SellerAuth = Depends(require_seller),
+    auth: UserAuth = Depends(require_seller),
     db: Session = Depends(get_db),
 ) -> list[QuoteOut]:
     requirement = load_for_seller(db, requirement_id, auth.user.id)
@@ -47,7 +46,7 @@ def list_quotes(
 @router.get("/quotes/{quote_id}", response_model=QuoteOut)
 def read_quote(
     quote_id: UUID,
-    auth: SellerAuth = Depends(require_seller),
+    auth: UserAuth = Depends(require_seller),
     db: Session = Depends(get_db),
 ) -> QuoteOut:
     quote = service.load_for_seller(db, quote_id, auth.user.id)
@@ -57,7 +56,7 @@ def read_quote(
 @router.post("/quotes/{quote_id}/review", response_model=QuoteOut)
 def review_quote(
     quote_id: UUID,
-    auth: SellerAuth = Depends(require_csrf),
+    auth: UserAuth = Depends(require_csrf),
     db: Session = Depends(get_db),
 ) -> QuoteOut:
     quote = service.load_for_seller(db, quote_id, auth.user.id)
@@ -65,12 +64,14 @@ def review_quote(
     return service.serialize(reviewed)
 
 
-@router.post("/portal/quotes/{quote_id}/confirm", response_model=QuoteOut)
+@router.post("/portal/requirements/{requirement_id}/quotes/{quote_id}/confirm")
 def confirm_quote(
+    requirement_id: UUID,
     quote_id: UUID,
-    requirement: Requirement = Depends(require_customer),
+    auth: UserAuth = Depends(require_client_csrf),
     db: Session = Depends(get_db),
 ) -> QuoteOut:
+    requirement = load_for_client(db, requirement_id, auth.user.id)
     quote = service.load_quote(db, quote_id)
     if quote.requirement_id != requirement.id:
         raise not_found("Quote not found")

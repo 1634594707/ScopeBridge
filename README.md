@@ -10,9 +10,9 @@ The product is built around one idea: **the model may propose, but only a progra
 human reviews, and only the client confirms.** Every line on a quote points back to the rule that
 priced it and the client message that justified it.
 
-> 中文文档索引：`docs/README.md`。正式方案 `docs/FORMAL_PROPOSAL.md`、开发记录 `docs/DEVELOPMENT.md`、
-> 演示脚本 `docs/DEMO_SCRIPT.md`、图表 `docs/architecture.html` / `docs/workflow.html`、历史文档
-> `docs/archive/`。界面文案为英文。
+> Documentation index: `docs/README.md` — formal proposal `docs/FORMAL_PROPOSAL.md`, development
+> record `docs/DEVELOPMENT.md`, demo script `docs/DEMO_SCRIPT.md`, diagrams
+> `docs/architecture.html` / `docs/workflow.html`, historical documents in `docs/archive/`.
 
 ![Landing page](docs/screenshots/01-landing.png)
 
@@ -35,13 +35,18 @@ message after that creates a new revision and supersedes open drafts — never e
 | --- | --- |
 | ![Quote](docs/screenshots/04-quote-confirmed.png) | ![Portal](docs/screenshots/05-client-portal.png) |
 
+| Client portal at 390 px |
+| --- |
+| ![Client portal on mobile](docs/screenshots/06-client-portal-mobile.png) |
+
 ---
 
 ## What is implemented (M0–M5)
 
 - **Versioned service rules** — base page, extra pages, add-ons, capability list, exclusions and
   lead time are stored as an immutable rule version; historical quotes keep their original numbers.
-- **Public client intake** — a brief becomes a requirement with a private, single-requirement link.
+- **Client-owned intake** — a signed-in client submits a brief; the requirement belongs to that
+  account, and ownership checks decide who may read or change it.
 - **Revisioned messages** — every append carries `expected_revision`; stale writes return `409`.
 - **Rule-checked scopes** — the studio enters a scope (pages, add-ons, requested features, assets),
   and the server prices and judges it. Up to two candidate scopes per revision.
@@ -49,8 +54,8 @@ message after that creates a new revision and supersedes open drafts — never e
   and explicit unsatisfied conditions.
 - **Quote versions** — generated from a feasible scope with line items, rule references and source
   message references; `DRAFT → REVIEWED → CONFIRMED`, with `SUPERSEDED` on change.
-- **Two identity paths** — seller session cookie + CSRF for writes; customer bearer token scoped to
-  one requirement.
+- **Two seats, one session model** — seller and client each sign in; writes carry CSRF; ownership
+  checks decide which briefs an account may read.
 - **Model draft (facts only)** — one click sends the brief to an OpenAI-compatible model, which
   returns five facts (`pages`, `budget_usd`, `deadline_days`, `assets_ready`, `features`). The studio
   turns those facts into at most two options and prices them; the model never supplies an amount.
@@ -98,7 +103,7 @@ ScopeBridge/
 ├─ backend/             FastAPI app, rules layer, alembic migrations, pytest
 ├─ frontend/            Vite + React + TypeScript + Tailwind
 ├─ evals/               cases.json, run_eval.py, metrics.py, reports/
-├─ docs/                Chinese design docs, diagrams, demo script, screenshots
+├─ docs/                design docs, diagrams, demo script, screenshots
 └─ .agents/             skills and decision notes (implemented / proposed / archived)
 ```
 
@@ -110,29 +115,41 @@ ScopeBridge/
 | --- | --- |
 | ![Payment panel](docs/screenshots/09-payment-panel.png) | ![Payment history](docs/screenshots/10-payment-history.png) |
 
-| Version diff |
-| --- |
-| ![Quote diff](docs/screenshots/11-quote-diff.png) |
+| Version diff | Scope estimator |
+| --- | --- |
+| ![Quote diff](docs/screenshots/11-quote-diff.png) | ![Scope estimator](docs/screenshots/19-scope-estimator.png) |
 
 | Model draft | Options it produced |
 | --- | --- |
 | ![Model draft](docs/screenshots/07-model-draft.png) | ![Model options](docs/screenshots/08-model-options.png) |
 
-**A real sandbox payment** (order `26R58752UG7226808`, capture `2N277259EM994623R`, $500.00, 30 Oct 2026):
+**The demo database records this sandbox capture** (order `5UL759133K5843017`, capture `5AR676939L8640110`, $500.00):
 
-| Approve in PayPal | Client sees it pending | Confirmed on return |
+| Confirmed on return | Frozen snapshot (client) | Frozen snapshot (console) |
 | --- | --- | --- |
-| ![PayPal review](docs/screenshots/12-paypal-review.png) | ![Awaiting approval](docs/screenshots/18-payment-awaiting.png) | ![Payment confirmed](docs/screenshots/13-payment-confirmed.png) |
+| ![Payment confirmed](docs/screenshots/13-payment-confirmed.png) | ![Client snapshot](docs/screenshots/14-order-snapshot-client.png) | ![Console snapshot](docs/screenshots/15-order-snapshot-seller.png) |
 
-| Frozen snapshot (client) | Frozen snapshot (console) |
+**When PayPal never answers** (the sandbox adapter's transport is fault-injected; no external charge):
+
+| Stuck but visible | Recovered with the same request id | Closed by hand |
+| --- | --- | --- |
+| ![Verifying](docs/screenshots/16-payment-verifying.png) | ![Retried](docs/screenshots/17-payment-retry-recovered.png) | ![Closed by hand](docs/screenshots/24-payment-close.png) |
+
+| Payment page (demo state) | Awaiting approval (demo state) |
 | --- | --- |
-| ![Client snapshot](docs/screenshots/14-order-snapshot-client.png) | ![Console snapshot](docs/screenshots/15-order-snapshot-seller.png) |
+| ![Payment page](docs/screenshots/12-payment-review.png) | ![Awaiting approval](docs/screenshots/18-payment-awaiting.png) |
 
-**When PayPal never answers** (fault injected with a 1 ms timeout):
-
-| Stuck but visible | Recovered with the same request id |
+| Console attention list | Client briefs with the Closed filter |
 | --- | --- |
-| ![Verifying](docs/screenshots/16-payment-verifying.png) | ![Retried](docs/screenshots/17-payment-retry-recovered.png) |
+| ![Attention](docs/screenshots/21-payment-attention.png) | ![Closed filter](docs/screenshots/20-client-briefs.png) |
+
+| Two seats at one desk | A brief in plain language |
+| --- | --- |
+| ![Sign in](docs/screenshots/22-sign-in.png) | ![Start a brief](docs/screenshots/23-start-brief.png) |
+
+Unless a screenshot is named as the real capture above, the images were taken from an isolated
+demo dataset; the PayPal transport is faked for payment states so every state can be reproduced
+without charging. Only `10` and `13`–`15` come from the demo database's recorded sandbox capture.
 
 ---
 
@@ -147,7 +164,7 @@ flowchart LR
     end
     subgraph API["FastAPI modular monolith"]
         R["api router"]
-        AUTH["accounts: session + portal token"]
+        AUTH["accounts: session + CSRF + ownership"]
         REQ["requirements"]
         AI["ai: fact extraction"]
         PROP["proposals"]
@@ -256,14 +273,14 @@ pnpm exec vite preview        # http://127.0.0.1:4173
 
 ### Demo walkthrough
 
-1. **Client** — open `/start`, submit a brief. You land on a private portal `/r/<token>`.
-2. **Studio** — open `/signin`, use the seller credentials from `.env`
-   (seed value in this repo's local `.env` is `seller@scopebridge.local` / `ScopeBridge-2026-demo`).
+1. **Client** — open `/signin`, choose **Client**, and sign in with the demo client credentials from
+   `.env`. Then open `/start`, submit a brief, and land on `/briefs/<id>`.
+2. **Studio** — open `/signin`, choose **Studio**, and use the seller credentials from `.env`.
 3. Open the brief in `/console`. Optionally press **Draft with the model** to see the extracted facts
    and two priced options; **Use this scope** copies one into the editor. Then **Price this scope**
    and **Draft quote**.
 4. On the quote page press **Review and issue**.
-5. **Back as the client** — open the private link, choose the scope, press **Confirm this version**.
+5. **Back as the client** — open **My briefs**, choose the scope, press **Confirm this version**.
    The quote turns read-only and the payment card appears.
 6. Press **Continue to PayPal**, sign in with a **Sandbox Personal** account from
    <https://developer.paypal.com/dashboard/accounts>, and approve. PayPal returns you to
@@ -276,9 +293,9 @@ A two-path shooting script (happy path and the "no order id" recovery) is in
 Try an infeasible scope too: three pages against a $500 budget returns
 `Scope totals $700.00 against a budget of $500.00; short by $200.00.`
 
-To demonstrate recovery without a stalled network, stop the API between approval and capture, press
-**I approved — capture now** (the request fails), start the API again, then press
-**Verify with PayPal** in the seller console: the attempt moves from `VERIFYING` to `COMPLETED`.
+To demonstrate recovery without a stalled network, stop the API after the buyer approves, press
+**Confirm again** (the request fails), start the API again, then press **Verify with PayPal** in
+the seller console: the attempt moves from `VERIFYING` to `COMPLETED`.
 
 ---
 
@@ -286,21 +303,26 @@ To demonstrate recovery without a stalled network, stop the API between approval
 
 | Method | Path | Who |
 | --- | --- | --- |
-| `POST` | `/api/session` · `DELETE /api/session` · `GET /api/session` | seller |
+| `POST` | `/api/session` · `/api/client-session` · `GET /api/session` · `DELETE /api/session` | seller / client sign-in, session read, sign-out (CSRF) |
+| `POST` | `/api/clients` | public — client registration, opens the first session |
 | `GET` | `/api/service-rules` | public |
-| `POST` | `/api/requirements` | public intake (creates the portal token once) |
+| `POST` | `/api/service-rules/estimate` | public — prices a scope from pages + add-on codes only |
+| `POST` | `/api/requirements` | client (CSRF); the brief is owned by the signed-in client |
 | `GET` | `/api/requirements` · `/api/requirements/{id}` | seller |
+| `DELETE` | `/api/requirements/{id}` | seller (CSRF); 409 once an order snapshot exists |
 | `POST` | `/api/requirements/{id}/messages` | seller (CSRF) |
 | `POST` | `/api/requirements/{id}/extractions` · `GET .../extractions/latest` | seller (CSRF) |
 | `POST` | `/api/requirements/{id}/proposals` | seller (CSRF) |
 | `POST` | `/api/requirements/{id}/quotes` | seller (CSRF) |
 | `POST` | `/api/quotes/{id}/review` | seller (CSRF) |
-| `GET` | `/api/portal` · `POST /api/portal/messages` | client token |
-| `POST` | `/api/portal/proposals/{id}/select` | client token |
-| `POST` | `/api/portal/quotes/{id}/confirm` | client token |
-| `POST` | `/api/portal/quotes/{id}/payment-attempts` | client token + `Idempotency-Key` |
-| `GET` | `/api/portal/payments/{id}` · `POST .../capture` | client token |
+| `GET` | `/api/portal/briefs` | client — the client's own briefs |
+| `GET` | `/api/portal/{requirement_id}` · `POST .../messages` | client + ownership |
+| `POST` | `/api/portal/requirements/{requirement_id}/proposals/{id}/select` | client + ownership (CSRF) |
+| `POST` | `/api/portal/requirements/{requirement_id}/quotes/{id}/confirm` | client + ownership (CSRF) |
+| `POST` | `/api/portal/requirements/{requirement_id}/quotes/{id}/payment-attempts` | client + ownership (CSRF) + `Idempotency-Key` |
+| `GET` | `/api/portal/payments/{id}` · `POST .../capture` | client + ownership (capture: CSRF) |
 | `POST` | `/api/payments/{id}/reconcile` · `/retry-create` · `/close` | seller (CSRF) |
+| `GET` | `/api/payments/attention` | seller — `RECONCILING` / `FAILED` on quotes not yet `PAID` |
 | `GET` | `/api/requirements/{id}/payments` · `/order` | seller |
 | `GET` | `/api/orders/{id}` | seller |
 | `GET` | `/api/health` | public |
@@ -313,14 +335,16 @@ Errors are always `{"code", "message", "details?"}` — no stack traces, SQL or 
 
 ```bash
 cd backend
-uv run pytest -q            # 78 tests
+uv run pytest -q            # 96 tests
 uv run ruff check .
 ```
 
 - `test_pricing.py` / `test_feasibility.py` — pure rule layer (three pages = 70000 cents, budget gap,
   unsupported capability, lead time, missing information).
 - `test_state_machine.py` — every illegal quote transition returns `409`.
-- `test_api_auth.py` — bad password, throttling, CSRF, unknown portal token, cross-seller access.
+- `test_api_auth.py` — bad password, throttling, CSRF, two-sided sign-in and cross-account access.
+- `test_api_service_rules_estimate.py` — the public estimator prices from the rule version, refuses
+  client-supplied amounts and reports unknown add-ons.
 - `test_api_quote_flow.py` — intake → scope → select → quote → review → confirm, plus revision
   supersession.
 - `test_eval_cases.py` — replays the five fixed cases in `evals/cases/`.
@@ -388,7 +412,7 @@ went from 47% to 100% on the same cases, and the change is recorded in
 - **Revision CAS instead of locks**: `expected_revision` guards appends; quotes are immutable once
   created, and a new revision supersedes open drafts.
 - **Decision notes** live in `.agents/notes/` (`implemented/architecture/`), including a STRIDE pass
-  over sessions, portal tokens and CSRF. Workflow rules for this repo are in `AGENTS.md`.
+  over sessions, ownership checks and CSRF. Workflow rules for this repo are in `AGENTS.md`.
 - **Model boundary**: `app/ai/client.py` is the only place that speaks HTTP to a model; failures are
   surfaced as `502`, invalid shapes as `422`, and every attempt (including failures) is stored in
   `ai_extractions` with its prompt version.

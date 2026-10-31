@@ -30,10 +30,12 @@ class Requirement(Base):
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
     seller_id: Mapped[UUID] = mapped_column(ForeignKey("users.id", ondelete="RESTRICT"))
+    client_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("users.id", ondelete="RESTRICT"), nullable=True
+    )
     client_name: Mapped[str] = mapped_column(String(120))
     client_business: Mapped[str] = mapped_column(String(160), default="")
     client_email: Mapped[str] = mapped_column(String(255), default="")
-    portal_token_hash: Mapped[str] = mapped_column(String(64), unique=True, index=True)
     revision: Mapped[int] = mapped_column(Integer, default=1)
     status: Mapped[str] = mapped_column(String(20), default="OPEN")
     created_at: Mapped[datetime] = mapped_column(

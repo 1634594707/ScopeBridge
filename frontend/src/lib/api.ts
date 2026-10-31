@@ -1,6 +1,7 @@
-import { readPortalToken } from "./customerToken";
 import type {
   ApiErrorBody,
+  AttentionPayment,
+  ScopeEstimate,
   Extraction,
   ExtractionEnvelope,
   IntakeResponse,
@@ -38,7 +39,6 @@ function csrfToken(): string | null {
 interface RequestOptions {
   method?: "GET" | "POST" | "DELETE";
   body?: unknown;
-  customer?: boolean;
   headers?: Record<string, string>;
 }
 
@@ -50,12 +50,6 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   const csrf = csrfToken();
   if (csrf) {
     headers["X-CSRF-Token"] = csrf;
-  }
-  if (options.customer) {
-    const token = readPortalToken();
-    if (token) {
-      headers["X-Customer-Token"] = token;
-    }
   }
   if (options.headers) {
     Object.assign(headers, options.headers);
@@ -83,9 +77,18 @@ export const api = {
   signIn: (email: string, password: string) =>
     request<SessionResponse>("/session", { method: "POST", body: { email, password } }),
 
+  registerClient: (payload: { email: string; password: string; display_name: string }) =>
+    request<SessionResponse>("/clients", { method: "POST", body: payload }),
+
+  clientSignIn: (email: string, password: string) =>
+    request<SessionResponse>("/client-session", { method: "POST", body: { email, password } }),
+
   signOut: () => request<void>("/session", { method: "DELETE" }),
 
   session: () => request<SessionResponse>("/session"),
+
+  deleteRequirement: (id: string) =>
+    request<void>(`/requirements/${id}`, { method: "DELETE" }),
 
   serviceRules: () => request<ServiceRules>("/service-rules"),
 
@@ -136,33 +139,39 @@ export const api = {
 
   reviewQuote: (id: string) => request<Quote>(`/quotes/${id}/review`, { method: "POST" }),
 
-  portal: () => request<PortalView>("/portal", { customer: true }),
+  portal: (requirementId: string) => request<PortalView>(`/portal/${requirementId}`),
 
-  portalMessage: (payload: {
-    body: string;
-    expected_revision: number;
-    budget_minor?: number;
-    deadline?: string;
-    assets_ready?: boolean;
-  }) => request<Message>("/portal/messages", { method: "POST", body: payload, customer: true }),
+  clientBriefs: () => request<RequirementSummary[]>("/portal/briefs"),
 
-  selectProposal: (id: string) =>
-    request<Proposal>(`/portal/proposals/${id}/select`, { method: "POST", customer: true }),
+  portalMessage: (
+    requirementId: string,
+    payload: {
+      body: string;
+      expected_revision: number;
+      budget_minor?: number;
+      deadline?: string;
+      assets_ready?: boolean;
+    },
+  ) => request<Message>(`/portal/${requirementId}/messages`, { method: "POST", body: payload }),
 
-  confirmQuote: (id: string) =>
-    request<Quote>(`/portal/quotes/${id}/confirm`, { method: "POST", customer: true }),
-
-  startPayment: (quoteId: string, idempotencyKey: string) =>
-    request<Payment>(`/portal/quotes/${quoteId}/payment-attempts`, {
+  selectProposal: (requirementId: string, proposalId: string) =>
+    request<Proposal>(`/portal/${requirementId}/proposals/${proposalId}/select`, {
       method: "POST",
-      customer: true,
+    }),
+
+  confirmQuote: (requirementId: string, quoteId: string) =>
+    request<Quote>(`/portal/${requirementId}/quotes/${quoteId}/confirm`, { method: "POST" }),
+
+  startPayment: (requirementId: string, quoteId: string, idempotencyKey: string) =>
+    request<Payment>(`/portal/${requirementId}/quotes/${quoteId}/payment-attempts`, {
+      method: "POST",
       headers: { "Idempotency-Key": idempotencyKey },
     }),
 
-  payment: (id: string) => request<Payment>(`/portal/payments/${id}`, { customer: true }),
+  payment: (id: string) => request<Payment>(`/portal/payments/${id}`),
 
   capturePayment: (id: string) =>
-    request<Payment>(`/portal/payments/${id}/capture`, { method: "POST", customer: true }),
+    request<Payment>(`/portal/payments/${id}/capture`, { method: "POST" }),
 
   reconcilePayment: (id: string) =>
     request<Payment>(`/payments/${id}/reconcile`, { method: "POST" }),
@@ -181,4 +190,11 @@ export const api = {
 
   requirementOrder: (id: string) =>
     request<{ order: OrderSnapshot | null }>(`/requirements/${id}/order`),
+
+  // Pending backend endpoints. The request carries scope choices only, never an amount;
+  // the server prices them with the current rule version.
+  estimateScope: (payload: { pages: number; addon_codes: string[] }) =>
+    request<ScopeEstimate>("/service-rules/estimate", { method: "POST", body: payload }),
+
+  attentionPayments: () => request<AttentionPayment[]>("/payments/attention"),
 };

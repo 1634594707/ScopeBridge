@@ -13,12 +13,12 @@ Numbers below are the real values from the seeded demo, not placeholders.
 | Time | Screen | Action | English subtitle |
 | --- | --- | --- | --- |
 | 0:00–0:15 | `/` | Land on the home page; hover the specimen card, do not scroll | "Freelancers lose money in the gap between a vague request and a signed scope." |
-| 0:15–0:40 | `/start` | Submit the coffee-shop brief: budget 500, three weeks, no assets | "The client writes it the way they would in an email. No forms to translate." |
+| 0:15–0:40 | `/signin` → `/start` | Sign in as the demo client, then submit the coffee-shop brief: budget 500, three weeks, no assets | "The client has an account too — every action is attributable to a sign-in. They still write it the way they would in an email." |
 | 0:40–1:05 | `/console` → requirement | Press **Draft with the model**; wait for facts and two options | "The model reads the brief and returns five facts — it never sets a price." |
 | 1:05–1:25 | same | Point at "As briefed $700 / cannot deliver" then "One-page launch $500 / deliverable" | "The server prices both options. The over-budget one stays visible with its exact violation." |
 | 1:25–1:40 | same | **Use this scope** → **Price this scope** → **Draft quote** | "The studio adopts the narrowed scope and issues a quote line by line." |
 | 1:40–1:55 | `/quotes/:id` | Scroll the line items; open the rule sidebar; press **Review and issue** | "Every amount points at the rule that priced it and the message that justified it." |
-| 1:55–2:15 | `/r/:token` | Client picks the scope, presses **Confirm this version**, then **Continue to PayPal** | "The client confirms one exact version. Confirming freezes it." |
+| 1:55–2:15 | `/briefs/:id` | Back as the client, open the brief from **My briefs**, pick the scope, press **Confirm this version**, then **Continue to PayPal** | "The client confirms one exact version. Confirming freezes it." |
 | 2:15–2:35 | PayPal sandbox → back to `/pay/:id` | Approve as the sandbox buyer; the return page confirms automatically | "Returning is not proof — the server confirms the capture with PayPal, then locks the order." |
 | 2:35–2:40 | `/pay/:id` | Show the order summary, then **Back to your brief** | "Amount, order and payer are frozen into one read-only snapshot." |
 
@@ -52,7 +52,7 @@ Use a second quote so Path A stays intact.
 ## Recording notes
 
 - Window 1440×900, browser zoom 100%, hide bookmarks bar.
-- Start the API and `vite preview` before recording; `.env` must hold the sandbox credentials.
+- Start the API and `vite preview` before recording; `.env` must hold the sandbox credentials and both demo account passwords (`SELLER_PASSWORD`, `CLIENT_PASSWORD`).
 - Reset the demo data with `uv run python -m app.seed` only if the quote is still `CONFIRMED`;
   do not re-seed after Path A if you want to reuse the same order.
 - English captions are burned in; the spoken language can be Chinese.

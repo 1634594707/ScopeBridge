@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 class PaymentOut(BaseModel):
     id: UUID
     quote_id: UUID
+    requirement_id: UUID
     status: str
     amount_minor: int
     currency: str
@@ -23,6 +24,12 @@ class PaymentOut(BaseModel):
     resolution_note: str | None
     created_at: datetime
     updated_at: datetime
+
+
+class AttentionPaymentOut(PaymentOut):
+    client_name: str
+    client_business: str
+    quote_number: int
 
 
 class ClosePaymentRequest(BaseModel):

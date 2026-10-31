@@ -5,32 +5,32 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.errors import conflict, forbidden, not_found
-from app.core.security import new_opaque_token, sha256_hex
 from app.requirements.models import Requirement, RequirementMessage
 from app.requirements.schemas import (
     AddMessageRequest,
     IntakeRequest,
     MessageOut,
     RequirementSummary,
+    SellerRequirementSummary,
 )
 
 OPEN_STATUS = "OPEN"
+CLOSED_STATUS = "CLOSED"
 
 
 def create_requirement(
-    db: Session, payload: IntakeRequest, seller_id: UUID
-) -> tuple[Requirement, str]:
-    portal_token = new_opaque_token()
+    db: Session, payload: IntakeRequest, seller_id: UUID, client_id: UUID
+) -> Requirement:
     requirement = Requirement(
         seller_id=seller_id,
+        client_id=client_id,
         client_name=payload.client_name,
         client_business=payload.client_business,
         client_email=payload.client_email,
-        portal_token_hash=sha256_hex(portal_token),
         revision=1,
         status=OPEN_STATUS,
     )
@@ -47,7 +47,7 @@ def create_requirement(
     db.add(requirement)
     db.commit()
     db.refresh(requirement)
-    return requirement, portal_token
+    return requirement
 
 
 def load_for_seller(db: Session, requirement_id: UUID, seller_id: UUID) -> Requirement:
@@ -63,15 +63,62 @@ def load_for_seller(db: Session, requirement_id: UUID, seller_id: UUID) -> Requi
     return requirement
 
 
-def load_for_portal(db: Session, portal_token_hash: str) -> Requirement:
+def load_for_client(db: Session, requirement_id: UUID, client_id: UUID) -> Requirement:
     requirement = db.scalar(
         select(Requirement)
-        .where(Requirement.portal_token_hash == portal_token_hash)
+        .where(Requirement.id == requirement_id)
         .options(selectinload(Requirement.messages))
     )
     if requirement is None:
         raise not_found("Requirement not found")
+    if requirement.client_id != client_id:
+        raise forbidden("This requirement belongs to another client")
     return requirement
+
+
+def list_for_client(db: Session, client_id: UUID, limit: int = 50) -> list[Requirement]:
+    rows = db.scalars(
+        select(Requirement)
+        .where(Requirement.client_id == client_id)
+        .options(selectinload(Requirement.messages))
+        .order_by(Requirement.updated_at.desc())
+        .limit(limit)
+    ).all()
+    return list(rows)
+
+
+def delete_for_seller(db: Session, requirement: Requirement) -> None:
+    """Remove an unpaid brief with every child row, newest dependency first.
+
+    A brief that has been paid carries an order snapshot, and the snapshot is
+    the receipt — it must never disappear, so payment blocks the delete.
+    """
+    from app.payments.models import OrderSnapshot, PaymentAttempt
+    from app.proposals.models import Proposal
+    from app.quotes.models import QuoteItem, QuoteVersion
+
+    snapshot = db.scalar(
+        select(OrderSnapshot.id).where(OrderSnapshot.requirement_id == requirement.id)
+    )
+    if snapshot is not None:
+        raise conflict(
+            "payment_completed",
+            "This brief has a completed payment. The order snapshot is the "
+            "receipt and cannot be deleted.",
+        )
+
+    quote_version_ids = select(QuoteVersion.id).where(
+        QuoteVersion.requirement_id == requirement.id
+    )
+    db.execute(delete(PaymentAttempt).where(PaymentAttempt.requirement_id == requirement.id))
+    db.execute(delete(QuoteItem).where(QuoteItem.quote_version_id.in_(quote_version_ids)))
+    db.execute(delete(QuoteVersion).where(QuoteVersion.requirement_id == requirement.id))
+    db.execute(delete(Proposal).where(Proposal.requirement_id == requirement.id))
+    db.execute(
+        delete(RequirementMessage).where(RequirementMessage.requirement_id == requirement.id)
+    )
+    db.delete(requirement)
+    db.commit()
 
 
 def list_for_seller(db: Session, seller_id: UUID, limit: int = 50) -> list[Requirement]:
@@ -145,6 +192,29 @@ def latest_client_message(requirement: Requirement) -> RequirementMessage | None
     return next(
         (message for message in reversed(requirement.messages) if message.author == "CLIENT"),
         None,
+    )
+
+
+def receipt_requirement_ids(db: Session, requirement_ids: list[UUID]) -> set[UUID]:
+    """Briefs carrying an order snapshot; the snapshot is the receipt."""
+    if not requirement_ids:
+        return set()
+    from app.payments.models import OrderSnapshot
+
+    return set(
+        db.scalars(
+            select(OrderSnapshot.requirement_id).where(
+                OrderSnapshot.requirement_id.in_(requirement_ids)
+            )
+        ).all()
+    )
+
+
+def summarize_for_seller(
+    requirement: Requirement, *, deletable: bool
+) -> SellerRequirementSummary:
+    return SellerRequirementSummary(
+        **summarize(requirement).model_dump(), deletable=deletable
     )
 
 

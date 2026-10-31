@@ -23,13 +23,15 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.core.errors import ApiError, conflict, not_found, unprocessable
 from app.payments.models import ACTIVE_STATUSES, OrderSnapshot, PaymentAttempt
-from app.payments.schemas import PaymentOut, SnapshotItemOut, SnapshotOut
+from app.payments.schemas import AttentionPaymentOut, PaymentOut, SnapshotItemOut, SnapshotOut
 from app.paypal import client as paypal
 from app.quotes.models import QuoteVersion
 from app.quotes.states import QuoteAction, QuoteStatus, transition
 from app.requirements.models import Requirement
+from app.requirements.service import CLOSED_STATUS
 
 MAX_CREATE_RETRIES = 2
+ATTENTION_STATUSES = ("RECONCILING", "FAILED")
 
 
 def start_payment(
@@ -292,6 +294,29 @@ def reconcile(db: Session, attempt: PaymentAttempt) -> PaymentAttempt:
     return _mark(db, attempt, "AWAITING_APPROVAL", None, None)
 
 
+def list_attention(db: Session, seller_id: UUID) -> list[AttentionPaymentOut]:
+    """Attempts the seller still has to resolve, newest activity first.
+
+    A failed attempt whose quote was paid later is history, not work: the
+    quote can no longer be unlocked, so the attempt is not listed here.
+    """
+    rows = db.execute(
+        select(PaymentAttempt, Requirement, QuoteVersion)
+        .join(Requirement, Requirement.id == PaymentAttempt.requirement_id)
+        .join(QuoteVersion, QuoteVersion.id == PaymentAttempt.quote_version_id)
+        .where(
+            Requirement.seller_id == seller_id,
+            PaymentAttempt.status.in_(ATTENTION_STATUSES),
+            QuoteVersion.status != QuoteStatus.PAID,
+        )
+        .order_by(PaymentAttempt.updated_at.desc())
+    ).all()
+    return [
+        serialize_attention(attempt, requirement, quote)
+        for attempt, requirement, quote in rows
+    ]
+
+
 def list_for_requirement(db: Session, requirement_id: UUID) -> list[PaymentOut]:
     rows = db.scalars(
         select(PaymentAttempt)
@@ -321,6 +346,7 @@ def serialize_attempt(attempt: PaymentAttempt) -> PaymentOut:
     return PaymentOut(
         id=attempt.id,
         quote_id=attempt.quote_version_id,
+        requirement_id=attempt.requirement_id,
         status=attempt.status,
         amount_minor=attempt.amount_minor,
         currency=attempt.currency,
@@ -333,6 +359,17 @@ def serialize_attempt(attempt: PaymentAttempt) -> PaymentOut:
         resolution_note=attempt.resolution_note,
         created_at=attempt.created_at,
         updated_at=attempt.updated_at,
+    )
+
+
+def serialize_attention(
+    attempt: PaymentAttempt, requirement: Requirement, quote: QuoteVersion
+) -> AttentionPaymentOut:
+    return AttentionPaymentOut(
+        **serialize_attempt(attempt).model_dump(),
+        client_name=requirement.client_name,
+        client_business=requirement.client_business,
+        quote_number=quote.quote_number,
     )
 
 
@@ -351,18 +388,22 @@ def serialize_snapshot(snapshot: OrderSnapshot) -> SnapshotOut:
     )
 
 
-def load_for_requirement(
-    db: Session, requirement: Requirement, payment_id: UUID
-) -> PaymentAttempt:
-    return _load(db, requirement, payment_id)
-
-
 def _load_for_seller(db: Session, payment_id: UUID, seller_id: UUID) -> PaymentAttempt:
     attempt = db.get(PaymentAttempt, payment_id)
     if attempt is None:
         raise not_found("Payment not found")
     requirement = db.get(Requirement, attempt.requirement_id)
     if requirement is None or requirement.seller_id != seller_id:
+        raise not_found("Payment not found")
+    return attempt
+
+
+def load_for_client(db: Session, payment_id: UUID, client_id: UUID) -> PaymentAttempt:
+    attempt = db.get(PaymentAttempt, payment_id)
+    if attempt is None:
+        raise not_found("Payment not found")
+    requirement = db.get(Requirement, attempt.requirement_id)
+    if requirement is None or requirement.client_id != client_id:
         raise not_found("Payment not found")
     return attempt
 
@@ -456,6 +497,9 @@ def _finalize(db: Session, attempt: PaymentAttempt, payload: dict[str, Any]) -> 
     attempt.error_detail = None
     if quote.status != QuoteStatus.PAID:
         quote.status = transition(quote.status, QuoteAction.MARK_PAID)
+    requirement = db.get(Requirement, attempt.requirement_id)
+    if requirement is not None and requirement.status != CLOSED_STATUS:
+        requirement.status = CLOSED_STATUS
     db.add(snapshot)
     try:
         db.commit()

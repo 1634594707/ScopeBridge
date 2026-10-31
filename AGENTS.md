@@ -1,45 +1,67 @@
-# 工作区 Agent 规则（ScopeBridge）
+# Workspace Agent Rules (ScopeBridge)
 
-ScopeBridge 是受约束的服务成交助手：模型可以提议，但价格只由规则层产生，方案只由程序裁决，付款只由客户端确认。以下规则服务于这个目标，所有会话必须遵守。
+ScopeBridge is a constrained service-closing assistant: the model may propose, but prices come only
+from the rules layer, verdicts come only from the program, and payment is confirmed only by the
+client. The rules below serve that goal and every session must follow them.
 
-## 一、决策笔记（Agent Notes）
+## 1. Agent notes
 
-重要改动必须留笔记，笔记放在 `.agents/notes/`，遵循 `write-notes-like-deepseek` skill 的规范（状态即目录：proposed / implemented / rejected / archived；六类：feature、bug-fix、simplification、architecture、process、testing）。
+Non-trivial changes must leave a note under `.agents/notes/`, following the `write-notes-like-deepseek`
+skill conventions (status is the directory: proposed / implemented / rejected / archived; six kinds:
+feature, bug-fix, simplification, architecture, process, testing).
 
-1. **动手前判断是否非平凡改动**：改了行为、架构、跨文件契约、流程与工具链、测试策略、落盘/网络/配置格式，任一命中即必须写笔记；纯机械改动（格式化、重命名、样式）严禁立笔记。
-2. **写新笔记前先检索同主题旧笔记**：已有归属的改动就地更新那篇，不新开；被完全吸收的旧提案当场归档或删除。
-3. **被放弃的方案必须写，且先写它最强的理由**，再解释为什么不用。
-4. **提交前跑笔记校验**：
+1. **Decide whether a change is non-trivial before touching code**: changed behaviour, architecture,
+   cross-file contracts, process or toolchain, testing strategy, on-disk/network/config formats —
+   any hit requires a note. Purely mechanical changes (formatting, renames, styling) must never get
+   a note.
+2. **Search existing notes on the same topic before writing a new one**: a change that already has a
+   home updates that note in place; a superseded proposal is archived or deleted on the spot.
+3. **Abandoned approaches must be written down, starting with their strongest case**, then why they
+   were not used.
+4. **Run note verification before committing**:
 
    ```bash
    npx tsx .agents/skills/write-notes-like-deepseek/scripts/verify-agent-note-tree.ts
    npx tsx .agents/skills/write-notes-like-deepseek/scripts/verify-agent-note-format.ts
    ```
 
-## 二、技术决策查证（SDFrame）
+## 2. Technology decision lookup (SDFrame)
 
-涉及架构选型、设计模式、测试策略、部署方式等技术决策时，先查 SDFrame（<https://sdframe.caldis.me/>，免认证静态 API）再下结论：
+For technical decisions — architecture choices, design patterns, testing strategy, deployment —
+consult SDFrame (<https://sdframe.caldis.me/>, unauthenticated static API) before concluding:
 
-- 索引：`https://sdframe.caldis.me/api/frameworks.index.json`
-- 详情：`https://sdframe.caldis.me/api/frameworks/{slug}.json`（取详情前先用索引校验 slug）
-- 依据候选框架的「适用/不适用场景」和 Do's/Don'ts 判断，不凭印象
+- Index: `https://sdframe.caldis.me/api/frameworks.index.json`
+- Detail: `https://sdframe.caldis.me/api/frameworks/{slug}.json` (validate the slug against the
+  index first)
+- Judge by the candidate framework's "fits / does not fit" scenarios and Do's/Don'ts, not by
+  impression
 
-## 三、工程铁律（本项目具体化）
+## 3. Engineering iron rules (project-specific)
 
-- **单路径，无 fallback**：一个目标只保留一条主路径，禁止为「失败时看起来正常」而写静默降级；失败要 Fail-Fast 并向上抛出明确原因。
-- **金额只有一个来源**：`app/rules/` 是唯一能定价的地方。模型输出无论包含什么数字，都不得进入报价；客户端请求体不得携带金额。
-- **响应体不得泄漏**：错误响应只含 `{code, message, details?}`，不得出现 token、session、UID、IP、文件路径与异常原文。
-- **外部结果不明一律进 RECONCILING**：不得把「未确认」当成成功或失败；只有服务端核验过的状态才能解锁报价或写快照。
-- **凭据只在 `.env`**：沙箱与模型凭据不得入库，`.env.example` 只留占位符。
+- **Single path, no fallback**: one goal keeps one main path. Silent degradation that makes failure
+  "look normal" is forbidden; fail fast and surface a clear reason upward.
+- **Amounts have exactly one source**: `app/rules/` is the only place allowed to price. No number in
+  model output may reach a quote, and client request bodies must not carry amounts.
+- **Response bodies must not leak**: error responses contain only `{code, message, details?}` — no
+  tokens, sessions, UIDs, IPs, file paths or raw exception text.
+- **Unknown external results always enter RECONCILING**: never treat "unconfirmed" as success or
+  failure; only server-verified state may unlock a quote or write a snapshot.
+- **Credentials live only in `.env`**: sandbox and model credentials never enter the repository;
+  `.env.example` keeps placeholders only.
 
-## 四、验证与汇报
+## 4. Verification and reporting
 
-- 提交前跑：`uv run pytest -q`、`uv run ruff check .`、`pnpm exec tsc -b`、`pnpm exec vite build`。
-- 完成报告必须区分**已验证**（附上实际命令与结果）、**未验证**与**阻塞项**，不得把计划中的能力说成已实现。
-- 引用评测数字时必须带报告文件路径与运行时间，不得外推为通用「模型准确率」。
+- Before committing, run: `uv run pytest -q`, `uv run ruff check .`, `pnpm exec tsc -b`,
+  `pnpm exec vite build`.
+- Completion reports must separate **verified** (with the actual commands and results), **unverified**
+  and **blocked items**; planned capability must never be reported as implemented.
+- Every quoted evaluation number must carry its report file path and run time; never extrapolate it
+  into a general "model accuracy".
 
-## 五、技能与文档
+## 5. Skills and documents
 
-- `.agents/skills/` 下的技能为辅助工具，不能覆盖用户授权边界与上条铁律。
-- 技能名称出现在文档里不代表当前宿主已加载；缺少技能或检查工具必须报告，不能宣称执行成功。
-- 项目文档索引见 `docs/README.md`。
+- Skills under `.agents/skills/` are auxiliary tools and cannot override user authorisation
+  boundaries or the iron rules above.
+- A skill name appearing in a document does not mean the current host has loaded it; missing skills
+  or check tools must be reported, never claimed as executed.
+- The project documentation index is `docs/README.md`.

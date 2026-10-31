@@ -49,7 +49,7 @@ def create_app() -> FastAPI:
         allow_origins=[settings.app_origin],
         allow_credentials=True,
         allow_methods=["*"],
-        allow_headers=["Content-Type", "X-CSRF-Token", "X-Customer-Token"],
+        allow_headers=["Content-Type", "X-CSRF-Token"],
     )
     register_error_handlers(app)
     app.include_router(api_router)

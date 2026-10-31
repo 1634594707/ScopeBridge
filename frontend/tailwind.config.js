@@ -46,6 +46,8 @@ export default {
       boxShadow: {
         card: "0 1px 0 0 rgba(22, 25, 28, 0.04)",
         lift: "0 18px 40px -28px rgba(15, 76, 69, 0.45)",
+        panel: "0 1px 2px rgba(22, 25, 28, 0.04), 0 12px 32px -18px rgba(22, 25, 28, 0.18)",
+        float: "0 2px 6px rgba(22, 25, 28, 0.05), 0 28px 60px -30px rgba(15, 76, 69, 0.42)",
       },
       keyframes: {
         "fade-up": {
@@ -56,10 +58,16 @@ export default {
           "0%": { transform: "scaleX(0)" },
           "100%": { transform: "scaleX(1)" },
         },
+        "soft-pulse": {
+          "0%, 100%": { opacity: "1" },
+          "50%": { opacity: "0.45" },
+        },
       },
       animation: {
         "fade-up": "fade-up 220ms ease-out both",
+        "fade-up-slow": "fade-up 480ms ease-out both",
         "rule-in": "rule-in 260ms ease-out both",
+        "soft-pulse": "soft-pulse 1.8s ease-in-out infinite",
       },
     },
   },

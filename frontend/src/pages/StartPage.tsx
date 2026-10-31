@@ -3,7 +3,6 @@ import { useMutation, useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { ArrowRight, Clock3, ShieldCheck } from "lucide-react";
 import { api, ApiError } from "../lib/api";
-import { rememberPortalToken } from "../lib/customerToken";
 import { formatMoney, isoInDays } from "../lib/format";
 import { Button } from "../components/Button";
 import { Card, CardHeader } from "../components/Card";
@@ -40,8 +39,7 @@ export default function StartPage() {
   const create = useMutation({
     mutationFn: api.createRequirement,
     onSuccess: (data) => {
-      rememberPortalToken(data.portal_token);
-      navigate(`/r/${data.portal_token}`);
+      navigate(`/briefs/${data.requirement_id}`);
     },
   });
 
@@ -210,7 +208,8 @@ export default function StartPage() {
 
             <div className="flex items-center justify-between gap-4 border-t border-line pt-4">
               <p className="max-w-[38ch] text-[12px] leading-relaxed text-ink-faint">
-                You will get a private link to this brief. No account, no payment yet.
+                The studio sees this brief on their desk and prices it against the published rules.
+                No payment happens here.
               </p>
               <Button type="submit" busy={create.isPending} icon={<ArrowRight size={15} />}>
                 Send brief

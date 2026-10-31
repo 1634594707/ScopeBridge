@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     session_secret: str
     seller_email: str
     seller_password: str
+    client_email: str
+    client_password: str
 
     model_provider: str = "openai-compatible"
     model_base_url: str = ""

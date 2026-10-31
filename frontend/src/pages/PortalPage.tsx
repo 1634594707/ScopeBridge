@@ -1,9 +1,8 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useParams } from "react-router-dom";
-import { CheckCircle2, MessageSquarePlus, RefreshCw } from "lucide-react";
+import { CheckCircle2, MessageSquarePlus } from "lucide-react";
 import { api, ApiError } from "../lib/api";
-import { readPortalToken, rememberPortalToken } from "../lib/customerToken";
 import { formatDeadline, formatMoney } from "../lib/format";
 import { Button } from "../components/Button";
 import { Card, CardHeader } from "../components/Card";
@@ -19,36 +18,32 @@ import { Tag } from "../components/Tag";
 import { EmptyState } from "../components/EmptyState";
 
 export default function PortalPage() {
-  const { token = "" } = useParams();
-  const [storedToken] = useState(() => {
-    if (readPortalToken() !== token) rememberPortalToken(token);
-    return token;
-  });
+  const { id = "" } = useParams();
   const queryClient = useQueryClient();
   const [changeNote, setChangeNote] = useState("");
   const [formError, setFormError] = useState("");
 
   const portal = useQuery({
-    queryKey: ["portal", storedToken],
-    queryFn: api.portal,
-    enabled: storedToken.length > 0,
+    queryKey: ["portal", id],
+    queryFn: () => api.portal(id),
+    enabled: id.length > 0,
   });
   const rules = useQuery({ queryKey: ["service-rules"], queryFn: api.serviceRules });
 
   const select = useMutation({
-    mutationFn: api.selectProposal,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["portal", storedToken] }),
+    mutationFn: (proposalId: string) => api.selectProposal(id, proposalId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["portal", id] }),
   });
 
   const confirm = useMutation({
-    mutationFn: api.confirmQuote,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["portal", storedToken] }),
+    mutationFn: (quoteId: string) => api.confirmQuote(id, quoteId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["portal", id] }),
   });
 
   const startPayment = useMutation({
-    mutationFn: (quoteId: string) => api.startPayment(quoteId, crypto.randomUUID()),
+    mutationFn: (quoteId: string) => api.startPayment(id, quoteId, crypto.randomUUID()),
     onSuccess: (payment) => {
-      queryClient.invalidateQueries({ queryKey: ["portal", storedToken] });
+      queryClient.invalidateQueries({ queryKey: ["portal", id] });
       if (payment.approve_url) {
         window.location.href = payment.approve_url;
       }
@@ -61,7 +56,8 @@ export default function PortalPage() {
   const [changeSaved, setChangeSaved] = useState<number | null>(null);
 
   const requestChange = useMutation({
-    mutationFn: api.portalMessage,
+    mutationFn: (payload: Parameters<typeof api.portalMessage>[1]) =>
+      api.portalMessage(id, payload),
     onSuccess: (message) => {
       setChangeSaved(message.revision);
       setFormError("");
@@ -69,7 +65,7 @@ export default function PortalPage() {
       setBudget("");
       setDeadline("");
       setAssets("keep");
-      queryClient.invalidateQueries({ queryKey: ["portal", storedToken] });
+      queryClient.invalidateQueries({ queryKey: ["portal", id] });
     },
   });
 
@@ -126,12 +122,12 @@ export default function PortalPage() {
     const status = portal.error instanceof ApiError ? portal.error.status : 0;
     return (
       <div className="mx-auto max-w-md py-24">
-        <span className="label">Private link</span>
+        <span className="label">The brief</span>
         <h1 className="mt-2 text-2xl font-semibold tracking-[-0.02em]">
-          {status === 401 ? "This link is no longer valid" : "The brief could not be loaded"}
+          {status === 403 ? "This brief belongs to another account" : "The brief could not be loaded"}
         </h1>
         <p className="mt-2 text-sm leading-relaxed text-ink-muted">
-          Ask the studio to send a fresh link, or open the brief from the message that contained it.
+          Open it again from your briefs list, or ask the studio what happened.
         </p>
       </div>
     );
@@ -148,7 +144,7 @@ export default function PortalPage() {
   return (
     <div>
       <PageHeader
-        eyebrow="Client portal"
+        eyebrow="Your brief"
         title={
           <>
             {requirement.client_name}
@@ -157,7 +153,7 @@ export default function PortalPage() {
             ) : null}
           </>
         }
-        description="This page is private to your brief. Every price below was computed from the studio's published rules, not typed by hand."
+        description="Signed in as its owner. Every price below was computed from the studio's published rules, not typed by hand."
         meta={
           <>
             <span className="flex items-baseline gap-2">
@@ -410,14 +406,6 @@ export default function PortalPage() {
               </Button>
             </form>
           </Card>
-
-          <div className="flex items-start gap-2 px-1 text-[11px] leading-relaxed text-ink-faint">
-            <RefreshCw size={13} className="mt-0.5 shrink-0" />
-            <span>
-              Keep this link private. It grants access to this brief only, and it is not a payment
-              credential.
-            </span>
-          </div>
 
           {rules.data ? (
             <div className="px-1 font-mono text-[10px] uppercase leading-relaxed tracking-[0.12em] text-ink-faint">

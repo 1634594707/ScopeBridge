@@ -1,4 +1,4 @@
-"""Wire schemas for the seller session endpoints."""
+"""Wire schemas for the account and session endpoints."""
 
 from __future__ import annotations
 
@@ -12,12 +12,19 @@ class SignInRequest(BaseModel):
     password: str = Field(min_length=8, max_length=200)
 
 
-class SellerProfile(BaseModel):
+class RegisterClientRequest(BaseModel):
+    email: str = Field(min_length=3, max_length=255)
+    password: str = Field(min_length=8, max_length=200)
+    display_name: str = Field(min_length=1, max_length=120)
+
+
+class SessionAccount(BaseModel):
     id: UUID
     email: str
     display_name: str
+    role: str
 
 
 class SessionResponse(BaseModel):
-    seller: SellerProfile
+    account: SessionAccount
     csrf_token: str

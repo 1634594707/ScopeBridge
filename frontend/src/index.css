@@ -10,6 +10,25 @@
   html {
     -webkit-font-smoothing: antialiased;
     text-rendering: optimizeLegibility;
+    scroll-behavior: smooth;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+
+    *,
+    *::before,
+    *::after {
+      animation-duration: 1ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 1ms !important;
+    }
+  }
+
+  [id] {
+    scroll-margin-top: 5rem;
   }
 
   body {
@@ -31,7 +50,7 @@
 
 @layer components {
   .surface {
-    @apply rounded-lg border border-line bg-paper-card;
+    @apply rounded-lg border border-line bg-paper-card shadow-card;
   }
 
   .hairline {
@@ -44,5 +63,33 @@
 
   .numeric {
     @apply font-mono tabular-nums;
+  }
+
+  .eyebrow {
+    @apply inline-flex items-center gap-2 font-mono text-[11px] uppercase tracking-[0.18em] text-pine;
+  }
+
+  .eyebrow::before {
+    content: "";
+    @apply h-px w-6 bg-pine/60;
+  }
+
+  .section-title {
+    @apply text-[28px] font-semibold leading-[1.15] tracking-[-0.025em] text-ink sm:text-[36px];
+  }
+
+  .section-lede {
+    @apply max-w-[62ch] text-[15px] leading-relaxed text-ink-muted;
+  }
+
+  .grid-paper {
+    background-image:
+      linear-gradient(to right, rgba(22, 25, 28, 0.045) 1px, transparent 1px),
+      linear-gradient(to bottom, rgba(22, 25, 28, 0.045) 1px, transparent 1px);
+    background-size: 28px 28px;
+  }
+
+  .input-base {
+    @apply h-10 w-full rounded-md border border-line bg-paper-card px-3 text-[14px] text-ink transition-colors duration-150 placeholder:text-ink-faint hover:border-ink/25 focus:border-pine/50 focus:outline-none focus:ring-2 focus:ring-pine/15;
   }
 }

@@ -8,7 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.errors import ApiError
-from app.rules.types import AddonDefinition, RuleSet
+from app.rules import evaluate
+from app.rules.types import AddonDefinition, RuleSet, ScopeInput
 from app.service_rules.models import ServiceRuleVersion
 
 DEFAULT_RULES: dict[str, Any] = {
@@ -73,6 +74,38 @@ def get_active_rules(db: Session) -> ServiceRuleVersion:
     if row is None:
         raise ApiError(409, "no_service_rules", "No service rule version has been published yet.")
     return row
+
+
+def estimate(db: Session, pages: int, addon_codes: list[str]) -> dict[str, Any]:
+    """Price a hypothetical scope with the current rule version.
+
+    No budget or deadline is passed on purpose: the estimator answers what a
+    scope costs, not whether a brief is feasible. `evaluate` reports those two
+    as missing fields, so the response only carries scope violations.
+    """
+    row = get_active_rules(db)
+    result = evaluate(
+        to_rule_set(row),
+        ScopeInput(pages=pages, addon_codes=tuple(addon_codes)),
+    )
+    return {
+        "rule_version": row.version_no,
+        "currency": result.currency,
+        "total_minor": result.total_minor,
+        "items": [
+            {
+                "code": item.code,
+                "label": item.label,
+                "amount_minor": item.amount_minor,
+                "rule_ref": item.rule_ref,
+            }
+            for item in result.items
+        ],
+        "violations": [
+            {"code": violation.code, "detail": violation.detail, "rule_ref": violation.rule_ref}
+            for violation in result.violations
+        ],
+    }
 
 
 def to_rule_set(row: ServiceRuleVersion) -> RuleSet:

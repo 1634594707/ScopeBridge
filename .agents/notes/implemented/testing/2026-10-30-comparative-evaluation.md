@@ -1,38 +1,77 @@
-# Agent Note: 双链路对照评测，分母与失败都必须可见
+# Agent Note: Two-arm comparative evaluation, with denominators and failures always visible
 
 Status: implemented
 
 ## Problem
 
-产品主张是「模型提议、程序裁决」比「让模型直接报价」更安全。这个主张需要证据，而单元测试只能证明规则层自洽，证明不了模型在真实网关上会给出什么。第一版评测还有两个口径缺陷：管线的 `unsafe_releases` 直接写成 0，等于把设计约束当成了测量结果；`helpful_options` 只在原需求本来可行时计数，缩减范围后可行的方案完全没被计入。另外所有比例都用「解析成功的样本」做分母，模型不听话反而不会拉低分数。
+The product claim is that "the model proposes, the program judges" is safer than "let the model
+quote directly". That claim needs evidence, and unit tests can only prove the rules layer is
+self-consistent — they say nothing about what the model actually emits on a real gateway. The first
+evaluation also had two measurement defects: the pipeline's `unsafe_releases` was hardcoded to 0,
+which treats a design constraint as a measurement; and `helpful_options` only counted cases where the
+original requirement was already feasible, ignoring options that became feasible after narrowing.
+Worse, every rate used "successfully parsed samples" as the denominator, so a disobedient model
+never hurt the score.
 
 ## Decision
 
-`evals/cases.json` 固定 19 个规则案例（另 1 个流程案例由接口测试覆盖），`evals/run_eval.py` 同时跑两条链路，`evals/metrics.py` 只做纯函数统计，便于单测：
+`evals/cases.json` fixes 19 rule-level cases (plus 1 flow case covered by the API tests);
+`evals/run_eval.py` runs both arms; `evals/metrics.py` is pure-function statistics only, easy to
+unit-test:
 
-- **baseline**：一次提示要求模型给出 `pages / addon_codes / total_usd / feasible`，再用规则复核它声明的范围。`price_mismatch`、`false_promise`、`unknown_addons` 任一命中即 `unsafe`。
-- **pipeline**：模型只出五个事实，服务端生成候选并定价。每个候选在写报告前都会**重新调用一次 `evaluate`**，比较展示价与复算价、展示结论与复算结论；`invariant_violations` 是这两类不一致的计数，每次运行实测，不再硬编码 0。
-- **分母**：所有 `*_rate` 一律除以 `calls`（含未解析与传输失败）；只有显式标注 `of_parsed` 的指标才用解析成功的样本做分母。
-- **失败分类**：每条失败记录 `failure_class`（`transport` / `content`）与 `raw_head`（原始输出前 200 字符），便于事后按原文归类。
-- **管线产出拆分**：`original_satisfied`（原需求可行且给出可行选项）、`narrowed_available`（原需求不可行但缩减后可行）、`no_solution_honest`（不可行且没有可行选项），三者之和应等于解析成功数。
+- **baseline**: one prompt asks the model for `pages / addon_codes / total_usd / feasible`, then the
+  rules re-check the scope it named. Any of `price_mismatch`, `false_promise`, `unknown_addons`
+  makes the case `unsafe`.
+- **pipeline**: the model returns five facts only; the server builds and prices candidates. Before
+  any report is written, every candidate **calls `evaluate` again** and the displayed price/verdict
+  are compared against the recomputed ones; `invariant_violations` counts both mismatch classes,
+  measured on every run instead of hardcoded 0.
+- **Denominators**: all `*_rate` divide by `calls` (including unparseable and transport failures);
+  only metrics explicitly labelled `of_parsed` use parsed samples as the denominator.
+- **Failure classification**: every failure records `failure_class` (`transport` / `content`) and
+  `raw_head` (first 200 characters of raw output) for later classification from the source.
+- **Pipeline outcome split**: `original_satisfied` (original requirement feasible and a feasible
+  option given), `narrowed_available` (original infeasible but the narrowed option is feasible),
+  `no_solution_honest` (infeasible and no feasible option) — the three should sum to the parsed
+  count.
 
-默认顺序执行（`--workers 1`），因为该网关在并发下会返回超时与截断，把并发问题误记成模型问题。报告落盘 JSON + Markdown，逐案例可复核，文件名带 `--tag`。
+Execution is sequential by default (`--workers 1`) because this gateway returns timeouts and
+truncations under concurrency, which would get misrecorded as model failures. Reports land as JSON +
+Markdown, reviewable case by case, with `--tag` in the filename.
 
 ## Alternatives considered
 
-1. **只保留 pytest 规则测试**。最强理由：稳定、快、零成本，已能证明规则正确。放弃原因：完全测不到模型行为，而评审看的是「AI 是否真的被用上且被约束」，需要真实调用证据。
-2. **继续用单一 `helpful_options` 指标**。最强理由：一个数字最好汇报，也最容易被观众记住。放弃原因：它奖励「原需求本来简单」的案例，惩罚「通过缩减解决冲突」的案例，正好和产品价值相反。
-3. **把管线 unsafe 固定写 0**。最强理由：由构造保证，写 0 在逻辑上成立。放弃原因：一旦定价或展示路径回归，报告仍然显示 0；改成每次复算才能发现回归。
-4. **解析失败自动重试直到成功**。最强理由：能得到一份漂亮的合规率。放弃原因：掩盖模型不稳定性，也让成本与延迟失真；失败次数与原文必须可见。
+1. **Keep only the pytest rule tests**. Strongest case: stable, fast, zero cost, already proves the
+   rules are right. Rejected: it measures nothing about model behaviour, and judges look at whether
+   "the AI is actually used and actually constrained" — that needs real-call evidence.
+2. **Keep the single `helpful_options` metric**. Strongest case: one number is the easiest to report
+   and the easiest for an audience to remember. Rejected: it rewards cases where the original
+   request was easy and punishes cases solved by narrowing — exactly backwards for the product's
+   value.
+3. **Hardcode the pipeline's unsafe count to 0**. Strongest case: guaranteed by construction, so 0
+   is logically true. Rejected: if the pricing or display path ever regressed, the report would
+   still show 0; only recomputing each run can expose the regression.
+4. **Automatically retry parse failures until they succeed**. Strongest case: yields a beautiful
+   compliance rate. Rejected: it masks model instability and distorts cost and latency; failure
+   counts and raw text must stay visible.
 
 ## Consequences
 
-- 收益：每项指标都能追溯到逐条结果；「模型不听话」与「流程不安全」分开呈现；管线不变量每次运行都被独立复算。
-- 代价：单次完整评测需要 38 次以上调用（19 案例 × 2 链路 × 重复次数），受网关波动影响明显。
-- 已知限制：报告只代表当次运行，引用数字必须带时间与文件路径，不得外推为「模型准确率」；本机网关在 2026-10-30 出现过超时与截断。
+- Benefit: every metric traces to per-case results; "the model misbehaved" and "the flow is unsafe"
+  are presented separately; the pipeline invariant is independently recomputed on every run.
+- Cost: one full evaluation needs 38+ calls (19 cases × 2 arms × repeats) and is visibly affected by
+  gateway fluctuations.
+- Known limitation: a report represents only that run; quoted numbers must carry the time and file
+  path and must never be extrapolated into a general "model accuracy"; the local gateway showed
+  timeouts and truncations on 2026-10-30.
 
 ## Verification
 
-- `backend/tests/test_eval_metrics.py`：分母、unsafe 双分母、管线三类产出拆分、不变量违规计数、Markdown 明确写出分母。
-- `backend/tests/test_eval_cases.py`：19 个规则案例逐条核对放行结论、总额、违规码与缺失字段。
-- 最新报告 `evals/reports/20261030T151055Z-facts-v7-inline-both.md`（19 案例 × 1 次）：baseline 解析 18/19（1 次传输错误），pipeline 19/19；baseline 2 次把规则拒绝的方案说成可行，pipeline 独立复算违规 0；pipeline 原需求满足 6、缩减后可行 6、如实无解 7。
+- `backend/tests/test_eval_metrics.py`: denominators, unsafe double denominators, the pipeline's
+  three-way outcome split, invariant-violation counting, Markdown states its denominators.
+- `backend/tests/test_eval_cases.py`: 19 rule-level cases checked one by one for release verdict,
+  total, violation codes and missing fields.
+- Latest report `evals/reports/20261030T151055Z-facts-v7-inline-both.md` (19 cases × 1 run):
+  baseline parsed 18/19 (1 transport error), pipeline 19/19; baseline twice called rule-rejected
+  scopes feasible, pipeline's independently recomputed violations are 0; pipeline: original
+  satisfied 6, narrowed available 6, honest no-solution 7.

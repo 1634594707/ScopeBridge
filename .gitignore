@@ -1,11 +1,11 @@
-# 凭据：绝不入库
+# Credentials: never tracked
 .env
 .env.*
 !.env.example
 *.pem
 *.key
 
-# 运行时数据
+# Runtime data
 data/
 *.db
 *.db-journal
@@ -22,7 +22,7 @@ ruff_cache/
 .coverage
 htmlcov/
 
-# Node / 前端构建产物
+# Node / frontend build output
 node_modules/
 dist/
 .vite/
@@ -30,19 +30,25 @@ dist/
 *.tsbuildinfo
 coverage/
 
-# 编辑器
+# Editors
 .idea/
 .vscode/
 .DS_Store
 Thumbs.db
 
-# 演示产物
+# Local-only reference (not part of the submission)
+REQUIREMENTS.md
+
+# Demo artifacts
 *.log
 !samples/*.txt
 !evals/**/*.json
 
-# 图表校验时生成的浏览器配置目录
+# Browser profile directories created during diagram review
 docs/.chrome-review*/
 
-# IDE / agent 工作区数据
+# IDE / agent workspace data
 .codebuddy/
+
+# Local demo recordings and recording scripts
+/recordings/

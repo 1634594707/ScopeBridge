@@ -1,29 +1,63 @@
-# Agent Note: 后端采用模块化单体的领域分包，并把定价与可行性收敛成零 IO 纯函数层
+# Agent Note: The backend is a modular monolith with domain packages, and pricing plus feasibility collapse into a zero-IO pure-function layer
 
 Status: implemented
 
 ## Problem
 
-项目要在两周内交付一条可被评委真实操作的成交主线，同时要能说清「AI 提议、程序裁决、人确认」的边界。如果价格计算散落在路由、模型和未来接入的模型调用里，任何人都无法证明金额没有被模型或前端改写；如果按微服务拆分，单人维护成本会吃掉实现时间。
+The project had two weeks to deliver a closing main line a judge can actually operate, while being
+able to explain the boundary of "the AI proposes, the program judges, the human confirms". If price
+computation were scattered across routers, models and future model calls, nobody could prove the
+amount was not rewritten by the model or the front end; and a microservice split would eat the
+implementation time of a single developer.
 
 ## Decision
 
-后端是单进程下按领域分包的模块化单体：`accounts`、`service_rules`、`requirements`、`proposals`、`quotes`，每包自带 models / schemas / service / router，跨包只调用对方 service，不跨包读表。`app/rules/` 独立成零 IO 纯函数层（`price_scope` / `evaluate`），输入是规则投影与范围输入，输出 `ValidationResult`，不认识数据库、网络和时钟（`today` 由调用方传入）。状态迁移同样收敛成纯函数 `quotes/states.transition`，非法迁移直接抛 409。数据访问使用 SQLAlchemy 2 同步会话 + psycopg3，迁移用 Alembic；金额一律整数美分。
+The backend is a modular monolith in one process, split by domain: `accounts`, `service_rules`,
+`requirements`, `proposals`, `quotes` — each package with its own models / schemas / service /
+router. Cross-package calls go through the other package's service only; tables are never read
+across packages. `app/rules/` is a standalone zero-IO pure-function layer (`price_scope` /
+`evaluate`): input is a rule projection plus a scope input, output is a `ValidationResult`; it knows
+nothing of the database, network or clock (`today` is passed in by the caller). State transitions
+collapse the same way into the pure function `quotes/states.transition`; illegal transitions raise
+409 directly. Data access uses SQLAlchemy 2 synchronous sessions + psycopg3, migrations use Alembic;
+amounts are always integer cents.
 
 ## Alternatives considered
 
-- **微服务拆分（requirements / proposals / quotes / payments 各自部署）**：最强的理由是模块边界物理隔离，未来支付链路故障不会拖垮报价。否掉的原因是本项目只有一名开发者和一条演示主线，跨服务鉴权、事务和本地编排的成本会直接挤掉功能实现时间；而且模块化单体在本阶段同样能靠「不跨包读表」保住边界，等真有独立扩缩容需求再拆。
-- **仓储模式（Repository + Unit of Work）**：最强的理由是把领域逻辑与持久化解耦，可以用内存仓储做快速单测。否掉的原因是本项目的领域逻辑已经被抽成纯函数，测试真正的价值集中在规则与状态机上，这两处不需要数据库替身；再包一层仓储只会增加记录与领域对象互相映射的样板代码。
-- **异步 SQLAlchemy / asyncpg**：最强的理由是 FastAPI 下并发吞吐更好，适合 I/O 密集。否掉的原因是 M4 引入支付后最关键的不变量是「先提交本地记录、再发外部请求」，同步会话让这条顺序在代码结构上一目了然，而演示规模下的并发量不构成瓶颈。
-- **引入状态机库**：最强的理由是状态与迁移集中声明、可视化。否掉的原因是只有 4 个状态和 4 条合法迁移，自写守卫 + 单测覆盖更可控，也不会引入库自带的隐式容错。
+- **Microservice split (requirements / proposals / quotes / payments deployed separately)**: the
+  strongest case is physical module isolation, so a payment-chain failure cannot take quoting down.
+  Rejected: this project has one developer and one demo main line; cross-service auth, transactions
+  and local orchestration would directly crowd out feature time. A modular monolith also preserves
+  the boundary at this stage via "no cross-package table reads"; splitting can wait until there is a
+  real independent-scaling need.
+- **Repository pattern (Repository + Unit of Work)**: the strongest case is decoupling domain logic
+  from persistence, with in-memory repositories for fast unit tests. Rejected: the domain logic here
+  is already extracted into pure functions, so real test value concentrates in the rules and state
+  machine — neither needs a database stand-in; another repository layer would only add mapping
+  boilerplate between records and domain objects.
+- **Async SQLAlchemy / asyncpg**: the strongest case is better concurrent throughput under FastAPI,
+  suited to I/O-bound work. Rejected: after M4 introduces payments, the critical invariant is
+  "commit the local record first, then issue the external request", and synchronous sessions make
+  that ordering obvious in the code structure; demo-scale concurrency is not a bottleneck.
+- **Adopt a state-machine library**: the strongest case is declarative, visualisable states and
+  transitions. Rejected: there are only 4 states and 4 legal transitions; hand-written guards +
+  unit tests are more controllable and avoid the library's implicit fault tolerance.
 
 ## Consequences
 
-- 收益：金额与可行性只有一个计算入口，M3 接模型时模型输出必须过同一个验证器；纯函数层可以脱离数据库跑全量案例，测试 3 秒内完成。
-- 收益：模块边界靠目录与 import 方向维持，新增 `payments` 包有明确位置。
-- 代价：同步会话在高并发下吞吐有限，属已知取舍；模块边界目前靠约定与 code review，没有引入自动依赖检查。
-- 代价：报价版本的不可变性只在应用层保证，数据库没有触发器阻止更新；演示阶段接受，M4 前若无余量则维持现状并在文档中标注。
+- Benefit: amounts and feasibility have exactly one computational entry point; when M3 attached the
+  model, its output had to pass through the same validator; the pure-function layer runs the full
+  case set without a database, tests finish within 3 seconds.
+- Benefit: module boundaries are maintained by directory layout and import direction; the new
+  `payments` package had an obvious home.
+- Cost: synchronous sessions limit throughput under high concurrency — a known trade-off; module
+  boundaries currently rely on convention and code review, with no automated dependency check.
+- Cost: quote-version immutability is enforced only in the application layer; no database trigger
+  blocks updates. Accepted for the demo; if there is no slack before M4 it stays as-is and is noted
+  in the docs.
 
 ## Testing
 
-`backend/tests/test_pricing.py`、`test_feasibility.py`、`test_state_machine.py` 覆盖纯函数层；`test_api_quote_flow.py` 覆盖读库与状态迁移；`evals/cases/*.json` 是固定案例集，`test_eval_cases.py` 逐条回放。
+`backend/tests/test_pricing.py`, `test_feasibility.py`, `test_state_machine.py` cover the
+pure-function layer; `test_api_quote_flow.py` covers database-backed flows and state transitions;
+`evals/cases/*.json` is the fixed case set, replayed case by case by `test_eval_cases.py`.

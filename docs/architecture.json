@@ -2,8 +2,8 @@
   "schema_version": 1,
   "diagram_type": "architecture",
   "meta": {
-    "title": "ScopeBridge 技术架构",
-    "locale": "zh-CN",
+    "title": "ScopeBridge technical architecture",
+    "locale": "en",
     "quality_profile": "showcase",
     "viewBox": [
       1200,
@@ -15,7 +15,7 @@
       "id": "browser",
       "type": "frontend",
       "label": "React + TypeScript",
-      "sublabel": "需求 · 方案对比 · 确认",
+      "sublabel": "Requirements · Option comparison · Confirmation",
       "pos": [
         40,
         275
@@ -29,7 +29,7 @@
       "id": "app",
       "type": "backend",
       "label": "Python + FastAPI",
-      "sublabel": "Pydantic · 权限 · 状态机",
+      "sublabel": "Pydantic · Permissions · State machine",
       "pos": [
         380,
         275
@@ -43,7 +43,7 @@
       "id": "db",
       "type": "database",
       "label": "PostgreSQL",
-      "sublabel": "报价版本 · 支付记录",
+      "sublabel": "Quote versions · Payment records",
       "pos": [
         830,
         275
@@ -56,8 +56,8 @@
     {
       "id": "ai",
       "type": "external",
-      "label": "AI 模型 API",
-      "sublabel": "提取 · 澄清 · 方案提议",
+      "label": "AI model API",
+      "sublabel": "Extraction · Clarification · Option proposals",
       "pos": [
         380,
         50
@@ -70,8 +70,8 @@
     {
       "id": "price",
       "type": "backend",
-      "label": "规则验证模块",
-      "sublabel": "约束 · 定价 · 来源引用",
+      "label": "Rule validation module",
+      "sublabel": "Constraints · Pricing · Source references",
       "pos": [
         830,
         50
@@ -84,8 +84,8 @@
     {
       "id": "pay",
       "type": "external",
-      "label": "PayPal 沙箱",
-      "sublabel": "创建 · 捕获 · 查询",
+      "label": "PayPal sandbox",
+      "sublabel": "Create · Capture · Query",
       "pos": [
         380,
         500
@@ -107,7 +107,7 @@
       "id": "app-db",
       "from": "app",
       "to": "db",
-      "label": "读写",
+      "label": "Read / write",
       "labelAt": [
         760,
         330
@@ -117,19 +117,19 @@
       "id": "app-ai",
       "from": "app",
       "to": "ai",
-      "label": "结构化输出"
+      "label": "Structured output"
     },
     {
       "id": "app-price",
       "from": "app",
       "to": "price",
-      "label": "调用计算"
+      "label": "Computation call"
     },
     {
       "id": "app-pay",
       "from": "app",
       "to": "pay",
-      "label": "服务端 API",
+      "label": "Server-side API",
       "labelAt": [
         495,
         425

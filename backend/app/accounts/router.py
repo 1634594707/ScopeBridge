@@ -1,4 +1,4 @@
-"""Seller session endpoints."""
+"""Account and session endpoints: one seller operator, registered clients."""
 
 from __future__ import annotations
 
@@ -6,13 +6,19 @@ from fastapi import APIRouter, Depends, Response
 from sqlalchemy.orm import Session
 
 from app.accounts import service
-from app.accounts.schemas import SellerProfile, SessionResponse, SignInRequest
+from app.accounts.models import ROLE_CLIENT, ROLE_SELLER
+from app.accounts.schemas import (
+    RegisterClientRequest,
+    SessionAccount,
+    SessionResponse,
+    SignInRequest,
+)
 from app.api.deps import (
     CSRF_COOKIE,
     SESSION_COOKIE,
-    SellerAuth,
-    require_csrf,
-    require_seller,
+    UserAuth,
+    require_user,
+    require_user_csrf,
 )
 from app.core.config import get_settings
 from app.core.db import get_db
@@ -43,36 +49,62 @@ def _set_session_cookies(response: Response, token: str, csrf_token: str) -> Non
     )
 
 
-@router.post("/session", response_model=SessionResponse)
-def sign_in(
-    payload: SignInRequest,
-    response: Response,
-    db: Session = Depends(get_db),
-) -> SessionResponse:
-    user, token, session = service.sign_in(db, payload.email, payload.password)
-    _set_session_cookies(response, token, session.csrf_token)
+def _session_response(user, session) -> SessionResponse:
     return SessionResponse(
-        seller=SellerProfile(id=user.id, email=user.email, display_name=user.display_name),
+        account=SessionAccount(
+            id=user.id,
+            email=user.email,
+            display_name=user.display_name,
+            role=user.role,
+        ),
         csrf_token=session.csrf_token,
     )
 
 
-@router.get("/session", response_model=SessionResponse)
-def read_session(auth: SellerAuth = Depends(require_seller)) -> SessionResponse:
-    return SessionResponse(
-        seller=SellerProfile(
-            id=auth.user.id,
-            email=auth.user.email,
-            display_name=auth.user.display_name,
-        ),
-        csrf_token=auth.session.csrf_token,
+@router.post("/session", response_model=SessionResponse)
+def seller_sign_in(
+    payload: SignInRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> SessionResponse:
+    user, token, session = service.sign_in(db, payload.email, payload.password, ROLE_SELLER)
+    _set_session_cookies(response, token, session.csrf_token)
+    return _session_response(user, session)
+
+
+@router.post("/clients", response_model=SessionResponse, status_code=201)
+def register_client(
+    payload: RegisterClientRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> SessionResponse:
+    user, token, session = service.register_client(
+        db, payload.email, payload.password, payload.display_name
     )
+    _set_session_cookies(response, token, session.csrf_token)
+    return _session_response(user, session)
+
+
+@router.post("/client-session", response_model=SessionResponse)
+def client_sign_in(
+    payload: SignInRequest,
+    response: Response,
+    db: Session = Depends(get_db),
+) -> SessionResponse:
+    user, token, session = service.sign_in(db, payload.email, payload.password, ROLE_CLIENT)
+    _set_session_cookies(response, token, session.csrf_token)
+    return _session_response(user, session)
+
+
+@router.get("/session", response_model=SessionResponse)
+def read_session(auth: UserAuth = Depends(require_user)) -> SessionResponse:
+    return _session_response(auth.user, auth.session)
 
 
 @router.delete("/session", status_code=204)
 def sign_out(
     response: Response,
-    auth: SellerAuth = Depends(require_csrf),
+    auth: UserAuth = Depends(require_user_csrf),
     db: Session = Depends(get_db),
 ) -> Response:
     service.revoke_session(db, auth.session.id)

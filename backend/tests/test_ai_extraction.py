@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-from datetime import date, timedelta
 
 import pytest
 from fastapi.testclient import TestClient
@@ -25,22 +24,20 @@ def _sign_in(client: TestClient) -> dict[str, str]:
     return {"X-CSRF-Token": response.json()["csrf_token"]}
 
 
-def _brief(client: TestClient, budget_minor: int = 50000) -> dict:
-    response = client.post(
-        "/api/requirements",
-        json={
-            "client_name": "Maya Ortiz",
-            "client_business": "Fern & Filter Coffee",
-            "client_email": "maya@example.com",
-            "message": (
-                "Three page site with online ordering, budget 500 dollars, live in two weeks. "
-                "No photos ready yet."
-            ),
-            "budget_minor": budget_minor,
-            "deadline": (date.today() + timedelta(days=30)).isoformat(),
-            "assets_ready": True,
-        },
+def _brief(budget_minor: int = 50000) -> dict:
+    """Create a brief through a fresh client browser; the test's own browser
+    stays signed in as the seller."""
+    from helpers import brief_payload, client_browser
+
+    browser, headers = client_browser()
+    payload = brief_payload(
+        message=(
+            "Three page site with online ordering, budget 500 dollars, live in two weeks. "
+            "No photos ready yet."
+        ),
+        budget_minor=budget_minor,
     )
+    response = browser.post("/api/requirements", json=payload, headers=headers)
     assert response.status_code == 201, response.text
     return response.json()
 
@@ -85,7 +82,7 @@ def test_server_builds_and_prices_two_options(
     client: TestClient, seller, rules, fake_model
 ) -> None:
     headers = _sign_in(client)
-    brief = _brief(client)
+    brief = _brief()
     fake_model(_facts())
 
     response = _extract(client, brief, headers)
@@ -116,7 +113,7 @@ def test_a_brief_that_fits_yields_one_option(
     client: TestClient, seller, rules, fake_model
 ) -> None:
     headers = _sign_in(client)
-    brief = _brief(client)
+    brief = _brief()
     fake_model(_facts(pages=1, features=["landing_pages"], assets_ready=True))
 
     body = _extract(client, brief, headers).json()
@@ -129,7 +126,7 @@ def test_model_supplied_money_is_ignored(
     client: TestClient, seller, rules, fake_model
 ) -> None:
     headers = _sign_in(client)
-    brief = _brief(client)
+    brief = _brief()
     fake_model(_facts(budget_usd=9999))
 
     body = _extract(client, brief, headers).json()
@@ -142,7 +139,7 @@ def test_prose_answer_is_rejected_and_recorded(
     client: TestClient, seller, rules, fake_model, db
 ) -> None:
     headers = _sign_in(client)
-    brief = _brief(client)
+    brief = _brief()
     fake_model("Happy to help! A three page site usually costs around $3,000.")
 
     response = _extract(client, brief, headers)
@@ -156,7 +153,7 @@ def test_prose_answer_is_rejected_and_recorded(
 
 def test_improvised_keys_are_rejected(client: TestClient, seller, rules, fake_model) -> None:
     headers = _sign_in(client)
-    brief = _brief(client)
+    brief = _brief()
     fake_model({**_facts(), "summary": "Three page site for a coffee bar."})
 
     response = _extract(client, brief, headers)
@@ -166,7 +163,7 @@ def test_improvised_keys_are_rejected(client: TestClient, seller, rules, fake_mo
 
 def test_out_of_range_pages_are_rejected(client: TestClient, seller, rules, fake_model) -> None:
     headers = _sign_in(client)
-    brief = _brief(client)
+    brief = _brief()
     fake_model(_facts(pages=99))
 
     response = _extract(client, brief, headers)
@@ -177,7 +174,7 @@ def test_latest_returns_the_last_successful_draft(
     client: TestClient, seller, rules, fake_model
 ) -> None:
     headers = _sign_in(client)
-    brief = _brief(client)
+    brief = _brief()
     fake_model(_facts())
     _extract(client, brief, headers)
 
@@ -190,7 +187,7 @@ def test_latest_returns_the_last_successful_draft(
 
 def test_latest_is_null_before_the_first_draft(client: TestClient, seller, rules) -> None:
     headers = _sign_in(client)
-    brief = _brief(client)
+    brief = _brief()
     latest = client.get(
         f"/api/requirements/{brief['requirement_id']}/extractions/latest", headers=headers
     )
@@ -202,7 +199,7 @@ def test_missing_model_credentials_are_reported(
     client: TestClient, seller, rules, monkeypatch
 ) -> None:
     headers = _sign_in(client)
-    brief = _brief(client)
+    brief = _brief()
     settings = get_settings().model_copy(update={"model_api_key": ""})
     monkeypatch.setattr("app.ai.service.get_settings", lambda: settings)
 

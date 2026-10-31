@@ -1,39 +1,81 @@
-# Agent Note: 支付先锁定报价再调用 PayPal，未知结果只做核验
+# Agent Note: Payments lock the quote before calling PayPal; unknown results are only verified
 
 Status: implemented
 
 ## Problem
 
-PayPal Orders v2 的「创建 → 买家批准 → 捕获」是三个独立步骤，捕获请求可能超时、响应可能在扣款后被丢弃，浏览器返回成功也可能是用户伪造的 URL。若把「浏览器回来」或「HTTP 200」当成已付款，会出现两类错误：收了钱但本地没有订单，或本地显示已付但实际没扣款。另外同一报价被重复点击、重复捕获，会形成两笔真实扣款。
+PayPal Orders v2's "create → buyer approval → capture" is three independent steps; the capture
+request may time out, its response may be dropped after the charge, and a successful browser return
+may be a user-forged URL. Treating "the browser came back" or "HTTP 200" as paid produces two error
+classes: money taken with no local order, or a locally paid order with no actual charge. In
+addition, repeated clicks or repeated captures on the same quote would create two real charges.
 
 ## Decision
 
-**先锁定，再调用，最后核验。** 开始支付时把报价从 `CONFIRMED` 推进到 `PAYMENT_LOCKED`，把 `PaymentAttempt` 以 `CREATING` 落库并提交，然后才调用 PayPal。任何外部调用都发生在事务提交之后。
+**Lock first, call second, verify last.** When payment starts, the quote moves from `CONFIRMED` to
+`PAYMENT_LOCKED`, the `PaymentAttempt` is persisted as `CREATING` and committed, and only then does
+the code call PayPal. Every external call happens after the transaction commits.
 
-**金额只来自服务端。** 创建订单时用已确认报价的 `total_minor` 与 `currency`；客户端请求体里没有金额字段。捕获后用 `capture.amount.value` 与 `currency_code` 逐字比对该报价，不一致进入 `RECONCILING`，绝不写订单快照。
+**The amount comes only from the server.** Order creation uses the confirmed quote's `total_minor`
+and `currency`; the client request body has no amount field. After capture, `capture.amount.value`
+and `currency_code` are compared verbatim against the quote; a mismatch enters `RECONCILING` and
+never writes an order snapshot.
 
-**结果不明一律 `RECONCILING`。** 传输错误、5xx、`ORDER_ALREADY_CAPTURED` 都不判失败，改为向 PayPal 查询原订单：`COMPLETED` 则补写快照，`APPROVED` 则用同一 `PayPal-Request-Id` 重新捕获，`VOIDED`/`EXPIRED` 才判 `FAILED` 并解锁报价。
+**Unknown results always enter `RECONCILING`.** Transport errors, 5xx and
+`ORDER_ALREADY_CAPTURED` are never judged failures; instead the original order is queried at
+PayPal: `COMPLETED` backfills the snapshot, `APPROVED` re-captures with the same
+`PayPal-Request-Id`, and only `VOIDED`/`EXPIRED` is judged `FAILED` and unlocks the quote.
 
-**幂等有数据库兜底。** `idempotency_key`、`paypal_order_id`、`paypal_capture_id` 各自唯一；同一报价同时最多一个活动尝试，由部分唯一索引 `uq_payment_attempts_active_quote` 保证；`OrderSnapshot.quote_version_id` 唯一，快照与 `PAID` 在同一事务提交。同键不同报价返回 `409 idempotency_conflict`。
+**Idempotency has a database backstop.** `idempotency_key`, `paypal_order_id` and
+`paypal_capture_id` are each unique; at most one active attempt per quote, enforced by the partial
+unique index `uq_payment_attempts_active_quote`; `OrderSnapshot.quote_version_id` is unique, and the
+snapshot plus `PAID` commit in one transaction. The same key on a different quote returns
+`409 idempotency_conflict`.
 
-**买家取消不是退款信号。** `cancel_url` 只回到状态页，不解锁；只有服务端核验出「确定没有成功捕获」才把报价退回 `CONFIRMED`。
+**A buyer cancel is not a refund signal.** `cancel_url` only returns to the status page and does not
+unlock; the quote returns to `CONFIRMED` only after the server verifies a definitive "no successful
+capture".
 
 ## Alternatives considered
 
-1. **直接信任浏览器返回的 `?paypal=return` 参数**。最强理由：实现最省事，用户体验连贯，PayPal 确实会把买家送回该地址。放弃原因：return URL 是客户端可伪造的，服务端没有金额与状态校验，也无法处理「扣款成功但响应丢失」。
-2. **由客户端提交金额，服务端照单创建订单**。最强理由：前端可以展示任意加项与折扣。放弃原因：违反「金额只由规则层产生」，且一次篡改就能改变收款额。
-3. **把 `PayPal-Request-Id` 当作永久去重机制**。最强理由：PayPal 官方支持重放同一请求返回同一结果，理论上不需要本地唯一键。放弃原因：请求标识的保存窗口依接口而异，不能当作长期唯一性保证；本地唯一约束才是最终防线。
-4. **捕获超时后自动重试捕获**。最强理由：多数超时是网络抖动，重试能提升成功率。放弃原因：捕获有真实副作用，盲目重试可能造成第二笔扣款；先查询再决定，是本设计唯一的路径。
-5. **客户端取消即解锁报价**。最强理由：用户不想付了应当立即恢复可编辑。放弃原因：取消只是交互事件，不能证明没有扣款；解锁会让同一版本在未知状态下被再次支付。
+1. **Trust the browser-returned `?paypal=return` parameter directly**. Strongest case: least
+   implementation work, smooth UX, and PayPal really does send the buyer back there. Rejected: the
+   return URL is client-forgeable, the server would do no amount or state verification, and a
+   "charged but response lost" capture could not be handled.
+2. **Client submits the amount; the server creates the order as told**. Strongest case: the front
+   end could show arbitrary add-ons and discounts. Rejected: violates "amounts come only from the
+   rules layer", and one tampered request changes the charge.
+3. **Treat `PayPal-Request-Id` as a permanent deduplication mechanism**. Strongest case: PayPal
+   officially supports replaying the same request to the same result, so no local unique key would
+   be needed in theory. Rejected: the retention window for request identifiers varies by endpoint
+   and cannot be treated as a long-term uniqueness guarantee; local unique constraints are the final
+   line of defence.
+4. **Automatically retry the capture after a timeout**. Strongest case: most timeouts are network
+   jitter and retries raise the success rate. Rejected: capture has a real side effect, and blind
+   retries can cause a second charge; query first, then decide — that is this design's only path.
+5. **Unlock the quote when the client cancels**. Strongest case: a user who does not want to pay
+   should immediately be able to edit again. Rejected: cancel is an interaction event and proves
+   nothing about charges; unlocking would let the same version be paid again in an unknown state.
 
 ## Consequences
 
-- 收益：已付款状态只可能由「服务端查询到的 COMPLETED 捕获 + 金额匹配」产生；重复点击、重复捕获、响应丢失都有确定行为；每个成功支付都有不可变快照。
-- 代价：报价可能长时间停留在 `PAYMENT_LOCKED`，需要卖家在控制台点「Verify with PayPal」或买家在支付状态页刷新；没有无人值守的对账任务。
-- 已知限制：沙箱买家批准必须人工完成；`PAYPAL_MERCHANT_ID` 未配置时只校验金额与币种，不校验收款方；没有退款、部分捕获与多笔分期。
-- 若日后接入生产环境，需要先补：webhook 校验、对账定时任务、退款状态机，并另立笔记与本页互链。
+- Benefit: the paid state can only arise from "a server-queried COMPLETED capture + matching
+  amount"; duplicate clicks, duplicate captures and lost responses all have defined behaviour; every
+  successful payment has an immutable snapshot.
+- Cost: a quote can stay in `PAYMENT_LOCKED` for a long time, requiring the seller to press
+  "Verify with PayPal" in the console or the buyer to refresh the payment status page; there is no
+  unattended reconciliation job.
+- Known limitation: sandbox buyer approval must be done by hand; without `PAYPAL_MERCHANT_ID` only
+  amount and currency are verified, not the payee; no refunds, partial captures or instalments.
+- Before any production integration: webhook verification, a scheduled reconciliation job and a
+  refund state machine must be added, with a new note linked to this page.
 
 ## Verification
 
-- `backend/tests/test_api_payment.py`：锁定与审批链接、重复键复用、捕获写快照并只写一次、金额不符留 `RECONCILING`、响应丢失后核验补写、拒付解锁并允许重试、跨报价键冲突、未确认报价不可支付、客户令牌越权 404。
-- 真实沙箱（2026-10-30）：创建订单 `52192821KS579122X` 返回 approve 链接；未批准直接捕获返回 `not_approved` 且报价保持 `PAYMENT_LOCKED`；卖家核验接口返回 `AWAITING_APPROVAL`。
+- `backend/tests/test_api_payment.py`: locking and the approve link, duplicate-key reuse, capture
+  writes exactly one snapshot, amount mismatch stays `RECONCILING`, lost response recovered by
+  verification, declined capture unlocks and allows retry, cross-quote key conflict, unconfirmed
+  quotes cannot be paid, cross-tenant client token 404.
+- Real sandbox (2026-10-30): created order `52192821KS579122X` returned an approve link; capturing
+  before approval returned `not_approved` with the quote still `PAYMENT_LOCKED`; the seller
+  verification endpoint returned `AWAITING_APPROVAL`.

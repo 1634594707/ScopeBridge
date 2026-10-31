@@ -7,12 +7,11 @@ from uuid import UUID
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import SellerAuth, require_csrf, require_customer, require_seller
+from app.api.deps import UserAuth, require_client_csrf, require_csrf, require_seller
 from app.core.db import get_db
 from app.proposals import service
 from app.proposals.schemas import ProposalCreate, ProposalOut
-from app.requirements.models import Requirement
-from app.requirements.service import load_for_seller
+from app.requirements.service import load_for_client, load_for_seller
 
 router = APIRouter(tags=["proposals"])
 
@@ -25,7 +24,7 @@ router = APIRouter(tags=["proposals"])
 def create_proposal(
     requirement_id: UUID,
     payload: ProposalCreate,
-    auth: SellerAuth = Depends(require_csrf),
+    auth: UserAuth = Depends(require_csrf),
     db: Session = Depends(get_db),
 ) -> ProposalOut:
     requirement = load_for_seller(db, requirement_id, auth.user.id)
@@ -36,18 +35,20 @@ def create_proposal(
 @router.get("/requirements/{requirement_id}/proposals", response_model=list[ProposalOut])
 def list_proposals(
     requirement_id: UUID,
-    auth: SellerAuth = Depends(require_seller),
+    auth: UserAuth = Depends(require_seller),
     db: Session = Depends(get_db),
 ) -> list[ProposalOut]:
     requirement = load_for_seller(db, requirement_id, auth.user.id)
     return service.list_for_requirement(db, requirement.id)
 
 
-@router.post("/portal/proposals/{proposal_id}/select", response_model=ProposalOut)
+@router.post("/portal/requirements/{requirement_id}/proposals/{proposal_id}/select")
 def select_proposal(
+    requirement_id: UUID,
     proposal_id: UUID,
-    requirement: Requirement = Depends(require_customer),
+    auth: UserAuth = Depends(require_client_csrf),
     db: Session = Depends(get_db),
 ) -> ProposalOut:
+    requirement = load_for_client(db, requirement_id, auth.user.id)
     proposal = service.select_proposal(db, requirement, proposal_id)
     return service.serialize(proposal)

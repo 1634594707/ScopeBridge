@@ -1,86 +1,166 @@
-# 归档：ScopeBridge 项目规划与技术设计 v2.0
+# Archived: ScopeBridge project plan and technical design v2.0
 
-> **本文已被 ../FORMAL_PROPOSAL.md（v3.0）取代，仅作历史基线保留，不再更新。**
-> 它描述的是开工前的目标，不代表当前实现；当前实现以 ../DEVELOPMENT.md 与根 README.md 为准。
+> **This document was superseded by ../FORMAL_PROPOSAL.md (v3.0) and is kept only as a historical
+> baseline; it is no longer updated.**
+> It describes the goals set before implementation began and does not reflect the current build;
+> for the current state see ../DEVELOPMENT.md and the root README.md.
 
 ---
 
-# ScopeBridge 项目规划与技术设计
+# ScopeBridge project plan and technical design
 
-2026 年 10 月 30 日 · v2.0 · 开工基线 · 独立参赛
+30 October 2026 · v2.0 · pre-work baseline · independent entry
 
-## 已确定的方向
+## Confirmed direction
 
-ScopeBridge 是受约束的服务成交助手，帮助网站设计自由职业者把冲突需求转化为可执行、可确认、可付款的服务方案。核心能力是约束下的方案生成、需求与收费依据关联、可恢复的支付流程。本文描述待开发目标，不代表功能已实现，也不承诺获奖。
+ScopeBridge is a constrained service-closing assistant that helps freelance web designers turn
+conflicting requests into executable, confirmable, payable service agreements. Core capabilities are
+option generation under constraints, linking requirements to pricing grounds, and a recoverable
+payment flow. This document described pre-development goals; it does not claim features were
+implemented and promises no award.
 
-技术栈确定为 React＋TypeScript＋Vite 前端，Python＋FastAPI 后端，Pydantic 校验、SQLAlchemy＋Alembic 数据访问和迁移、PostgreSQL 存储。后台采用一个进程内的业务模块和显式状态机。模型使用一个支持结构化输出的供应商，通过小样例确定具体型号；在评测前固定模型与提示词版本。暂不加入 Go、多智能体框架、向量数据库、消息队列或额外微服务。
+The stack is fixed: React + TypeScript + Vite front end, Python + FastAPI back end, Pydantic
+validation, SQLAlchemy + Alembic for data access and migrations, PostgreSQL storage. The back end is
+one process with business modules and an explicit state machine. The model uses one provider with
+structured output; the exact model is pinned with small samples, and model and prompt versions are
+frozen before evaluation. No Go, no multi-agent frameworks, no vector databases, no message queues,
+no extra microservices.
 
-## 产品与核心演示
+## Product and core demo
 
-客户提出“500 美元、三页网站、在线点单、下周上线”。系统提取预算、页面数、功能、截止日期及素材条件，关联原始消息；最多每轮澄清三个关键问题。程序根据服务规则识别约束冲突，AI 提议最多两个替代方案，程序验证后展示取舍。无可行解时明确返回未满足条件，不编造优惠或交期。
+A client asks for "a $500 three-page site with online ordering, live next week". The system extracts
+budget, page count, features, deadline and asset conditions, and links the original message; at most
+three key clarification questions per round. The program identifies constraint conflicts from the
+service rules, the AI proposes at most two alternatives, the program verifies them and presents the
+trade-offs. When no feasible solution exists, the unmet conditions are returned explicitly — no
+invented discounts or delivery dates.
 
-演示价目表：基础单页 500 USD、每加一页 100 USD、包含移动端适配与两轮修改。外部点单链接可以作为单页包含项，但必须说明不提供站内点单或支付系统。标准交期为素材齐备后五个工作日，不包含域名和托管；最终交付日期由服务者确认。三页方案为 700 USD，500 USD 只能选择缩小范围的可行方案。所有金额和条件都是演示配置，不是市场报价。
+Demo price list: base single page 500 USD, each extra page 100 USD, includes mobile adaptation and
+two revision rounds. An external ordering link can be included in the single page, but the absence
+of on-site ordering or payment systems must be stated. Standard lead time is five business days
+after assets are complete, excluding domain and hosting; the final delivery date is confirmed by the
+provider. The three-page scope is 700 USD; 500 USD admits only a narrowed, feasible option. All
+amounts and conditions are demo configuration, not market rates.
 
-每项报价展示来源消息、对应服务规则、包含与排除项。客户选择方案，服务者审核，客户再次确认最终版本后进入 PayPal 沙箱付款。追加需求生成差异并重新确认；付款响应超时演示查询原交易恢复状态。阶段方案只能支付当前明确的一阶段，不做自动后续扣款。
+Every quote shows its source messages, matching service rules, inclusions and exclusions. The client
+picks an option, the provider reviews, the client confirms the final version, then the PayPal
+sandbox payment runs. An add-on request produces a diff and a fresh confirmation; a timed-out
+payment response is demonstrated by querying the original transaction to recover state. Only the
+current, explicit stage is payable; no automatic subsequent charges.
 
-## 页面与范围
+## Pages and scope
 
-首版包含服务配置、客户需求与方案对比、服务者审核、订单详情四类页面。核心页面突出未确认条件、方案取舍、收费依据和当前版本。预设一个服务者和一个沙箱商户，不做注册、多商户、分账、托管、退款管理或项目管理。
+The first version contains four page groups: service configuration, client requirement with option
+comparison, provider review, and order detail. Core pages foreground unconfirmed conditions, option
+trade-offs, pricing grounds and the current version. One provider and one sandbox merchant are
+preset; there is no registration, multi-merchant, revenue split, escrow, refund management or
+project management.
 
-模型只处理自然语言提取、澄清、方案提议和解释。价格、可行性检查、权限、状态迁移、重试策略由程序处理。无效模型输出不得进入确认和付款。模型不可直接创建或捕获支付。
+The model only handles natural-language extraction, clarification, option proposal and explanation.
+Prices, feasibility checks, permissions, state transitions and retry policy are handled by the
+program. Invalid model output must not reach confirmation or payment. The model never creates or
+captures a payment.
 
-## 架构与运行方式
+## Architecture and operation
 
-前端通过业务 API 调用 FastAPI。后端包含需求与方案、规则校验、报价版本、支付四个模块，共用 PostgreSQL；架构图中的规则模块属于后端内部模块。先本地运行，用前端开发代理访问后端，部署时同域反向代理，减少跨域配置。图见 architecture.html 与 workflow.html。
+The front end calls FastAPI through the business API. The back end has four modules — requirements
+and proposals, rule validation, quote versions, payments — sharing PostgreSQL; the rules module in
+the architecture diagram is an internal backend module. Run locally first with a front-end dev
+proxy; in deployment, same-origin reverse proxying minimises CORS configuration. Diagrams:
+architecture.html and workflow.html.
 
-先使用 PayPal REST Orders CAPTURE 流程实现明确的创建、捕获、查询操作。Agent Toolkit 不作为首版必需依赖；若增加工具调用，仅允许方案查询与验证工具，付款仍由人确认和服务端状态控制。客户端不提交最终支付金额，服务端从当前已确认报价读取金额。
+PayPal integration starts with the REST Orders CAPTURE flow — explicit create, capture and query
+operations. The Agent Toolkit is not a first-version dependency; if tool calling is added later, it
+is restricted to proposal query and verification tools, while payments remain under human
+confirmation and server-side state control. The client never submits the final payment amount; the
+server reads it from the current confirmed quote.
 
-服务者采用单账户登录与服务端会话；客户访问令牌限定到单一需求，服务端验证所有资源归属。开发使用演示数据，密钥只在环境变量中；公开仓库只保留环境变量模板。具体接口、模型和状态见 DEVELOPMENT.md。
+The provider signs in with a single account and a server-side session; the client access token is
+scoped to one requirement, and the server verifies ownership of every resource. Development uses
+demo data; secrets live only in environment variables; the public repo keeps only the environment
+template. Concrete endpoints, model contract and states: DEVELOPMENT.md.
 
-## 数据与交易原则
+## Data and transaction principles
 
-保存服务规则版本、需求和消息、候选方案、不可变报价版本、支付尝试、订单快照。报价项保留消息 ID 与规则 ID，可解释关系由程序检查引用是否有效。金额使用整数美分，演示只用 USD。
+Persist service rule versions, requirements and messages, candidate proposals, immutable quote
+versions, payment attempts and order snapshots. Quote items keep message IDs and rule IDs; the
+program validates that explainability references resolve. Amounts are integer minor units (cents);
+the demo uses USD only.
 
-选择方案后生成草稿，服务者审核后客户确认。需求变化创建新草稿，撤销旧确认。付款开始后锁定版本，结果未知时禁止修改；已付款订单只读，新增服务另建需求。客户端取消只意味着停止交互，服务端需核验后决定能否解锁。
+Selecting an option creates a draft; the provider reviews; the client confirms. Requirement changes
+create new drafts and supersede old confirmations. Once payment starts the version is locked and
+must not change while the result is unknown; a paid order is read-only, and new services go into a
+new requirement. A client cancel only means the interaction stopped; the server verifies before
+deciding whether to unlock.
 
-支付成功必须校验捕获状态、金额、币种、关联订单与商户。创建和捕获分别使用稳定请求标识，本地唯一约束及事务避免重复执行。超时进入核验中，查询原交易；明确未完成时才使用原操作标识重试。PayPal 请求标识的支持与保存窗口依接口而异，不能当作永久去重机制。首版采用返回页面、重新打开订单及服务者手动核验触发恢复，不声称实现无人值守自动对账。
+A successful payment must verify capture state, amount, currency, linked order and merchant. Create
+and capture each use stable request identifiers; local unique constraints and transactions prevent
+double execution. Timeouts enter a verifying state and query the original transaction; retry with
+the original operation identifier only when the outcome is definitively incomplete. PayPal's support
+and retention window for request identifiers varies by endpoint and must not be treated as a
+permanent deduplication mechanism. The first version triggers recovery through the return page,
+reopening the order and manual seller verification — no claim of unattended automatic
+reconciliation.
 
-## 排期与削减顺序
+## Schedule and cut order
 
-升级范围后核心投入重估为 88 小时，另预留约 12 小时提交缓冲；70 小时旧估算不再适用。
+After the scope upgrade, the core estimate is 88 hours plus a 12-hour submission buffer; the old
+70-hour estimate no longer applies.
 
-| 日期 北京时间 | 工作 | 小时 | 完成标准 |
+| Date (Beijing time) | Work | Hours | Done when |
 |---|---|---:|---|
-| 10 月 30 至 31 日 | 访谈、规则、脚手架、评测样例 | 10 | 固定服务规则及五个代表案例 |
-| 11 月 1 至 2 日 | 数据、权限、手动方案与报价 | 14 | 不依赖模型走通审核确认 |
-| 11 月 3 至 4 日 | 需求提取、方案生成、规则验证 | 18 | 冲突案例得到合法方案或明确无解 |
-| 11 月 5 至 6 日 | PayPal 沙箱、版本锁定、恢复 | 18 | 成功支付及超时恢复可复现 |
-| 11 月 7 至 8 日 | 方案对比、依据关联、变更体验 | 14 | 新用户理解取舍并完成交易 |
-| 11 月 9 至 10 日 | 评测、试用、修复、材料 | 14 | 20 个案例及干净环境运行记录 |
-| 11 月 11 至 12 日 | 冻结、录制、提交 | 缓冲 | 12 日 20 时前完成提交 |
+| Oct 30–31 | Interviews, rules, scaffolding, eval samples | 10 | Fixed service rules and five representative cases |
+| Nov 1–2 | Data, permissions, manual options and quotes | 14 | Review and confirmation work without the model |
+| Nov 3–4 | Requirement extraction, option generation, rule validation | 18 | Conflict cases yield a legal option or a clear no-solution |
+| Nov 5–6 | PayPal sandbox, version locking, recovery | 18 | Successful payment and timeout recovery reproducible |
+| Nov 7–8 | Option comparison, evidence links, change UX | 14 | A new user understands trade-offs and completes a transaction |
+| Nov 9–10 | Evaluation, trial, fixes, materials | 14 | 20 cases and a clean-environment run record |
+| Nov 11–12 | Freeze, record, submit | Buffer | Submission complete before the 12th, 20:00 |
 
-落后时依次削减高级服务配置、候选方案数量、视觉动效。保留约束验证、依据关联、双方确认、真实沙箱支付和状态恢复。11 月 6 日仍未完成付款闭环时，停止新增产品能力。
+When behind, cut in order: advanced service configuration, candidate option count, visual polish.
+Constraint validation, evidence links, two-sided confirmation, real sandbox payment and state
+recovery are always kept. If the payment loop is not done by November 6, stop adding product
+capability.
 
-## 验收与评测
+## Acceptance and evaluation
 
-采用 pytest 验证业务规则与状态迁移，Playwright 验证用户主流程。20 个固定案例包括信息缺失、预算不足、不可提供功能、交期冲突、需求变更。比较单次提示生成与提议后规则校验两种方式，使用相同输入和服务规则，每例运行三次。
+pytest verifies business rules and state transitions; Playwright verifies the main user flow. The
+20 fixed cases cover missing information, over-budget, unoffered capabilities, deadline conflicts
+and requirement changes. Compare single-prompt generation against propose-then-validate using the
+same inputs and service rules, three runs per case.
 
-记录生成方案违规率、最终放行违规率、有效方案比例、无解识别情况、平均与 P95 耗时、实际 token 用量及计费估算。人工审核参考标签；仅拒绝所有方案不能算高质量。必须通过金额不可被模型覆盖、越权请求被拒绝、旧版本不可付款、双击不重复支付、超时不误判失败、已付款快照不可变等测试。模型评测与支付集成测试分别记录。
+Record the generated-option violation rate, the final released violation rate, the feasible-option
+ratio, no-solution identification, average and P95 latency, actual token usage and cost estimates.
+Human review provides reference labels; rejecting everything is not high quality. The following must
+pass: amounts cannot be overridden by the model, unauthorised requests are rejected, stale versions
+cannot be paid, double clicks do not double-charge, timeouts are not misread as failures, paid
+snapshots are immutable. Model evaluation and payment integration tests are recorded separately.
 
-至少试用一次并记录真实反馈。故障演示可用测试代理模拟丢失捕获响应，必须标注模拟故障，支付本身仍走真实沙箱。
+At least one real trial with recorded feedback. Fault demos may inject a lost capture response with
+a test proxy, marked as a simulated fault; the payment itself still runs on the real sandbox.
 
-## 视频与提交
+## Video and submission
 
-2 分 40 秒视频：问题 20 秒，冲突识别与两方案对比 40 秒，收费依据与审核 30 秒，变更确认 20 秒，沙箱付款与恢复 30 秒，实际评测结果 20 秒。英文或英文字幕，公开 YouTube 视频少于三分钟。
+A 2 minute 40 second video: problem 20 s, conflict detection and two-option comparison 40 s, pricing
+grounds and review 30 s, change confirmation 20 s, sandbox payment and recovery 30 s, actual
+evaluation results 20 s. English, or English subtitles, published on YouTube, under three minutes.
 
-交付公开仓库与许可证、README、环境变量模板、沙箱运行指引、项目介绍、截图和视频。许可证建议 MIT，公开前核对依赖许可证。官方截止按现有规则记录为北京时间 2026 年 11 月 13 日 04 时，提交前再核对活动页。评审为技术实现、产品设计、潜在影响、创新性、演示五项等权；此处沿用此前官网核验，原 REQUIREMENTS.md 的四项摘要不作为开发基线。
+Deliver the public repository with license, README, environment template, sandbox run guide, project
+description, screenshots and video. MIT is the suggested license; dependency licenses checked before
+release. The official deadline is recorded from current rules as 04:00 Beijing time on 13 November
+2026; re-check the event page before submitting. Judging is five equal-weight criteria — technical
+implementation, product design, potential impact, innovation, demo — carried over from the earlier
+official-page verification; the four-item summary in REQUIREMENTS.md is not the development
+baseline.
 
-## 来源与下一步
+## Sources and next step
 
-比赛规则：https://paypalaihackathon.devpost.com/rules
+Competition rules: https://paypalaihackathon.devpost.com/rules
 
-PayPal Orders：https://developer.paypal.com/api/rest/integration/orders-api/
+PayPal Orders: https://developer.paypal.com/api/rest/integration/orders-api/
 
-PayPal 幂等说明：https://developer.paypal.com/api/rest/reference/idempotency/
+PayPal idempotency: https://developer.paypal.com/api/rest/reference/idempotency/
 
-产品、架构和工时为本项目决策；比赛要求沿用此前核验记录。下一步按 DEVELOPMENT.md 的 M0 开始，先建立可验证规则和手动成交闭环。
+Product, architecture and hour figures are this project's decisions; competition requirements carry
+over the earlier verification record. Next step: start M0 per DEVELOPMENT.md — establish verifiable
+rules and the manual closing loop first.

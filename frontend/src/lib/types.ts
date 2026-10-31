@@ -7,14 +7,17 @@ export type QuoteStatus =
   | "SUPERSEDED";
 export type Author = "CLIENT" | "SELLER";
 
-export interface Seller {
+export type AccountRole = "SELLER" | "CLIENT";
+
+export interface SessionAccount {
   id: string;
   email: string;
   display_name: string;
+  role: AccountRole;
 }
 
 export interface SessionResponse {
-  seller: Seller;
+  account: SessionAccount;
   csrf_token: string;
 }
 
@@ -63,6 +66,8 @@ export interface RequirementSummary {
   message_count: number;
   created_at: string;
   updated_at: string;
+  /** Seller list only: false once an order snapshot (the receipt) exists. */
+  deletable?: boolean;
 }
 
 export interface RequirementDetail {
@@ -125,6 +130,7 @@ export interface Quote {
 export interface Payment {
   id: string;
   quote_id: string;
+  requirement_id: string;
   status: string;
   amount_minor: number;
   currency: string;
@@ -217,8 +223,23 @@ export interface ExtractionEnvelope {
 
 export interface IntakeResponse {
   requirement_id: string;
-  portal_token: string;
-  portal_path: string;
+  brief_path: string;
+}
+
+/** Response of `POST /api/service-rules/estimate` (endpoint pending on the backend). */
+export interface ScopeEstimate {
+  rule_version: number;
+  currency: string;
+  total_minor: number;
+  items: { code: string; label: string; amount_minor: number; rule_ref: string }[];
+  violations: Violation[];
+}
+
+/** Row of `GET /api/payments/attention` (endpoint pending on the backend). */
+export interface AttentionPayment extends Payment {
+  client_name: string;
+  client_business: string;
+  quote_number: number;
 }
 
 export interface ApiErrorBody {

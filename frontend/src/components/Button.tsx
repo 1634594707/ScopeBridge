@@ -13,7 +13,7 @@ interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const variants: Record<Variant, string> = {
   primary:
-    "bg-pine text-ink-invert border border-pine hover:bg-pine-deep hover:border-pine-deep active:translate-y-px",
+    "bg-pine text-ink-invert border border-pine shadow-lift hover:bg-pine-deep hover:border-pine-deep active:translate-y-px",
   secondary:
     "bg-paper-card text-ink border border-line hover:border-ink/25 hover:bg-paper active:translate-y-px",
   ghost: "bg-transparent text-ink-muted border border-transparent hover:text-ink hover:bg-paper-deep",

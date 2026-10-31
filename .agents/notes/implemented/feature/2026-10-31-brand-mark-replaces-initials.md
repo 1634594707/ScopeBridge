@@ -1,42 +1,82 @@
-# Agent Note: 品牌标记改成图形标记，替掉 "SB" 字母缩写
+# Agent Note: The brand mark becomes a graphic mark, replacing the "SB" letter monogram
 
 Status: implemented
 
 ## Problem
 
-侧栏、顶栏和浏览器标签页一直用松绿方块里的 "SB" 两个字母当标记。这个缩写读起来别扭，也不带任何产品语义：它既没说出「范围被框定」，也没说出「成交线被锁定」。字母标记在非英文语境下还要额外解释，而 ScopeBridge 真正想强调的恰恰是那三件事——规则定价、人工复核、客户确认同一版本。
+The sidebar, top bar and browser tab had been using the letters "SB" in a pine-green square. The
+monogram reads awkwardly and carries no product meaning: it says nothing about "scope being framed"
+or "the closing line being locked". A letter mark also needs extra explanation outside English
+contexts, while what ScopeBridge actually wants to emphasise is exactly three things — rules price
+it, humans review it, the client confirms that exact version.
 
 ## Decision
 
-**用图形标记替掉字母缩写，并且交付矢量几何而不是生成位图。**
+**Replace the letter monogram with a graphic mark, and ship vector geometry rather than a generated
+bitmap.**
 
-- 图形语义：四个制图角标＝被框定的工作范围（scope）；一条横贯的成交线＝定价后的那条协议线；线尾一个实心方块＝被锁定、被确认的唯一版本。
-- 资产与位置：
-  - `frontend/public/favicon.svg`——松绿圆角方块（rx=5）＋纸白反白标记，给浏览器标签页。
-  - `frontend/public/logo-mark.svg`——松绿标记、透明底，给 README 等文档直接引用。
-  - `frontend/src/components/BrandMark.tsx`——React 组件。`BrandMark` 用 `currentColor` 跟随文字色，`BrandTile` 是松绿方块版本，供 `AppShell` 的侧栏与顶栏使用；落地页首屏的眉标行也换成了 `BrandMark`。
-- 几何：一份 48 单位坐标系的路径（角标笔画 5，成交线笔画 3，方块 8×8），统一用 `translate(16 16) scale(0.56) translate(-24 -24)` 缩进 32 单位画布。三处资产共用同一份坐标与缩放，favicon 与界面标记的比例不会漂移。
-- 配色沿用既有 token：松绿 `#0F4C45` 与纸白 `#FAFAF8`，`tailwind.config.js` 不需要新增颜色。
-- 概念图来源：先用用户提供的 OpenAI 兼容图像端点（`https://new.orbitix.site`，模型 `gpt-image-2.5-flare` 与 `gpt-image-2.5-sunburst`）生成 7 张候选位图取概念（桥拱、拱心石、制图角标、文档加弧线、门洞拱等），再手写成矢量几何交付。端点密钥只经环境变量传入，生成脚本放在系统临时目录，不入库。
+- Graphic semantics: four drafting corner ticks = the framed working scope (scope); one horizontal
+  closing line = the agreement line after pricing; one solid square at the end of the line = the
+  single version that was locked and confirmed.
+- Assets and placement:
+  - `frontend/public/favicon.svg` — pine-green rounded square (rx=5) with a paper-white mark
+    reversed out, for the browser tab.
+  - `frontend/public/logo-mark.svg` — pine-green mark on a transparent background, for direct
+    reference from the README and other documents.
+  - `frontend/src/components/BrandMark.tsx` — React components. `BrandMark` follows the text colour
+    via `currentColor`; `BrandTile` is the pine-green square version used by the `AppShell` sidebar
+    and top bar; the landing page's eyebrow row also switched to `BrandMark`.
+- Geometry: one path in a 48-unit coordinate system (corner-tick stroke 5, closing-line stroke 3,
+  square 8×8), uniformly inset into a 32-unit canvas with
+  `translate(16 16) scale(0.56) translate(-24 -24)`. All three assets share the same coordinates and
+  scale, so favicon and UI mark proportions cannot drift.
+- Colours reuse the existing tokens: pine green `#0F4C45` and paper white `#FAFAF8`;
+  `tailwind.config.js` needed no new colours.
+- Concept provenance: candidate bitmaps were first generated for concepts only via the user's
+  OpenAI-compatible image endpoint (`https://new.orbitix.site`, models `gpt-image-2.5-flare` and
+  `gpt-image-2.5-sunburst`) — 7 candidates exploring bridge arches, keystone, drafting corner ticks,
+  document with an arc, doorway arch and similar ideas — then hand-written as vector geometry for
+  delivery. The endpoint key passed only through environment variables; the generation script lived
+  in the system temp directory and was never committed.
 
 ## Alternatives considered
 
-1. **直接用生成的一张位图当 logo**。最强理由：省事，视觉上「就是 AI 出的图」。放弃原因：PNG 在 16–32px 会糊，描边粗细不统一，也没法跟随主题色；favicon 场景下位图会被浏览器缩放糊掉。
-2. **桥拱 + 拱心石（名字里 Bridge 的直译）**。最强理由：语义最贴产品——拱心石正好对应「唯一被确认的版本撑起整个协议」。放弃原因：大尺寸下读起来像隧道/门洞，拱心石方块像烟囱；缩到 18px 只剩「一个 n 加一个点」，识别度明显弱于角标方案。
-3. **保留字母缩写，只换字体和排版**。最强理由：零改动、零风险，favicon 与界面自动一致。放弃原因：用户已明确否定这个缩写，而且字母承载不了「框定范围 / 锁定版本」这条主线。
-4. **只改 favicon，界面里继续用 SB**。最强理由：改动面最小。放弃原因：标签页与界面里是两套标记，比不改更像半成品。
+1. **Use one generated bitmap as the logo directly**. Strongest case: effortless, and it "looks
+   AI-made". Rejected: PNGs blur at 16–32px, stroke weights are inconsistent, and it cannot follow
+   the theme colour; in favicon duty the browser would scale the bitmap into mush.
+2. **Bridge arch + keystone (the literal reading of "Bridge" in the name)**. Strongest case: the
+   closest semantic fit — the keystone maps exactly to "the single confirmed version holds up the
+   whole agreement". Rejected: at large sizes it reads as a tunnel or doorway, and the keystone
+   square looks like a chimney; shrunk to 18px it becomes "an n and a dot", clearly weaker
+   recognition than the corner-tick option.
+3. **Keep the monogram, change only the typeface and layout**. Strongest case: zero change, zero
+   risk, favicon and UI stay automatically consistent. Rejected: the user had explicitly rejected
+   the monogram, and letters cannot carry the "frame the scope / lock the version" storyline.
+4. **Change only the favicon; keep SB in the UI**. Strongest case: smallest possible diff. Rejected:
+   two different marks in the tab and in the UI looks more unfinished than not changing at all.
 
 ## Consequences
 
-- 收益：标记在 16px 仍可辨；favicon、界面方块、独立资产三处比例一致；标记语义与产品主线（规则定价 → 人工复核 → 客户确认）一一对应。
-- 代价：新增两个静态资源和一个组件；README 仓库地图补了一行说明品牌资产的位置。
-- 已知限制：几何在三个文件里各写一份（`favicon.svg`、`logo-mark.svg`、`BrandMark.tsx`），以后改形状必须三处同步，否则比例会漂移。真要单一来源，需要把 SVG 以 `?raw` 方式引入构建产物，本次没做。
-- 候选位图没有入库：仓库体量只有 3.9 MB，7 张 PNG 约 7 MB，不值当；生成配方记在本篇里，需要时可复现。
+- Benefit: the mark remains legible at 16px; favicon, UI tile and standalone asset share one
+  proportion; the mark's semantics map one-to-one onto the product storyline (rules price → human
+  review → client confirms).
+- Cost: two new static assets and one component; the README's repository map gained a line noting
+  where the brand assets live.
+- Known limitation: the geometry is written out three times (`favicon.svg`, `logo-mark.svg`,
+  `BrandMark.tsx`); any future shape change must sync all three or proportions drift. A true single
+  source would import the SVG as `?raw` into the bundle — deliberately not done this time.
+- Candidate bitmaps are not committed: the repo is only 3.9 MB while the 7 PNGs are about 7 MB; not
+  worth it. The generation recipe is recorded in this note and can be reproduced if needed.
 
 ## Verification
 
-- `cd frontend && pnpm exec tsc -b` 与 `pnpm exec vite build` 均通过；构建产物里有 `favicon.svg` 与 `logo-mark.svg`。
-- 用无头 Chrome 加载仓库里真实的两个 SVG 文件，在 128 / 32 / 16 / 18px 下渲染核对比例与可读性。
-- 静态服务 `frontend/dist` 后截图真实落地页页头，确认顶栏方块标记与眉标行小标记渲染正确。
-- `cd backend && uv run pytest -q` 与 `uv run ruff check .` 通过（本次改动不触后端，仍按仓库规则全量跑）。
-- 笔记校验：`npx tsx .agents/skills/write-notes-like-deepseek/scripts/verify-agent-note-tree.ts` 与 `verify-agent-note-format.ts` 通过。
+- `cd frontend && pnpm exec tsc -b` and `pnpm exec vite build` both pass; `favicon.svg` and
+  `logo-mark.svg` are present in the build output.
+- Loaded the two real SVG files from the repository in headless Chrome and checked proportions and
+  legibility at 128 / 32 / 16 / 18px.
+- Served `frontend/dist` statically and screenshotted the real landing-page header, confirming the
+  top-bar tile mark and the eyebrow-row small mark render correctly.
+- `cd backend && uv run pytest -q` and `uv run ruff check .` pass (the change touches no backend
+  code, but the full suite runs per repo rules).
+- Note verification: `npx tsx .agents/skills/write-notes-like-deepseek/scripts/verify-agent-note-tree.ts`
+  and `verify-agent-note-format.ts` pass.

@@ -2,42 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import date, timedelta
-
 from fastapi.testclient import TestClient
-
-from app.core.config import get_settings
-
-
-def _sign_in(client: TestClient) -> dict[str, str]:
-    settings = get_settings()
-    response = client.post(
-        "/api/session",
-        json={"email": settings.seller_email, "password": settings.seller_password},
-    )
-    assert response.status_code == 200, response.text
-    return {"X-CSRF-Token": response.json()["csrf_token"]}
+from helpers import client_browser, create_brief, seller_browser
 
 
-def _intake(client: TestClient) -> tuple[str, dict[str, str]]:
-    response = client.post(
-        "/api/requirements",
-        json={
-            "client_name": "Maya Ortiz",
-            "client_business": "Fern & Filter Coffee",
-            "client_email": "maya@example.com",
-            "message": "One page site with our menu and a link to our ordering tool.",
-            "budget_minor": 50000,
-            "deadline": (date.today() + timedelta(days=30)).isoformat(),
-            "assets_ready": True,
-        },
-    )
-    assert response.status_code == 201, response.text
-    body = response.json()
-    return body["requirement_id"], {"X-Customer-Token": body["portal_token"]}
-
-
-def _proposal(client: TestClient, requirement_id: str, headers: dict, **overrides) -> dict:
+def _proposal(
+    browser: TestClient, requirement_id: str, headers: dict, **overrides
+) -> dict:
     payload = {
         "label": "One-page launch",
         "pages": 1,
@@ -46,25 +17,26 @@ def _proposal(client: TestClient, requirement_id: str, headers: dict, **override
         "assets_ready": True,
     }
     payload.update(overrides)
-    response = client.post(
+    response = browser.post(
         f"/api/requirements/{requirement_id}/proposals", json=payload, headers=headers
     )
     assert response.status_code == 201, response.text
     return response.json()
 
 
-def test_full_manual_quote_flow(client: TestClient, seller, rules) -> None:
-    headers = _sign_in(client)
-    requirement_id, portal_headers = _intake(client)
+def test_full_manual_quote_flow(seller, rules) -> None:
+    seller_client, seller_headers = seller_browser()
+    brief_client, brief_headers = client_browser()
+    requirement_id = create_brief(brief_client, brief_headers)
 
-    feasible = _proposal(client, requirement_id, headers)
+    feasible = _proposal(seller_client, requirement_id, seller_headers)
     assert feasible["feasible"] is True
     assert feasible["total_minor"] == 50000
 
     infeasible = _proposal(
-        client,
+        seller_client,
         requirement_id,
-        headers,
+        seller_headers,
         label="Two pages plus copywriting",
         pages=2,
         addon_codes=["copywriting"],
@@ -72,41 +44,43 @@ def test_full_manual_quote_flow(client: TestClient, seller, rules) -> None:
     assert infeasible["feasible"] is False
     assert infeasible["total_minor"] == 75000
 
-    third = client.post(
+    third = seller_client.post(
         f"/api/requirements/{requirement_id}/proposals",
         json={"label": "Third idea", "pages": 1},
-        headers=headers,
+        headers=seller_headers,
     )
     assert third.status_code == 409
     assert third.json()["code"] == "proposal_limit"
 
-    portal = client.get("/api/portal", headers=portal_headers)
+    portal = brief_client.get(f"/api/portal/{requirement_id}")
     assert portal.status_code == 200
     assert len(portal.json()["proposals"]) == 2
     assert portal.json()["quotes"] == []
 
-    rejected_selection = client.post(
-        f"/api/portal/proposals/{infeasible['id']}/select", headers=portal_headers
+    rejected_selection = brief_client.post(
+        f"/api/portal/requirements/{requirement_id}/proposals/{infeasible['id']}/select",
+        headers=brief_headers,
     )
     assert rejected_selection.status_code == 409
 
-    selected = client.post(
-        f"/api/portal/proposals/{feasible['id']}/select", headers=portal_headers
+    selected = brief_client.post(
+        f"/api/portal/requirements/{requirement_id}/proposals/{feasible['id']}/select",
+        headers=brief_headers,
     )
     assert selected.status_code == 200
     assert selected.json()["selected_at"] is not None
 
-    blocked_quote = client.post(
+    blocked_quote = seller_client.post(
         f"/api/requirements/{requirement_id}/quotes",
         json={"proposal_id": infeasible["id"]},
-        headers=headers,
+        headers=seller_headers,
     )
     assert blocked_quote.status_code == 409
 
-    created = client.post(
+    created = seller_client.post(
         f"/api/requirements/{requirement_id}/quotes",
         json={"proposal_id": feasible["id"], "scope_summary": "One page, external ordering"},
-        headers=headers,
+        headers=seller_headers,
     )
     assert created.status_code == 201, created.text
     quote = created.json()
@@ -118,83 +92,86 @@ def test_full_manual_quote_flow(client: TestClient, seller, rules) -> None:
     assert "exclusion" in codes
     assert any(item["included"] is False for item in quote["items"])
 
-    premature = client.post(f"/api/portal/quotes/{quote['id']}/confirm", headers=portal_headers)
+    confirm_path = f"/api/portal/requirements/{requirement_id}/quotes/{quote['id']}/confirm"
+    premature = brief_client.post(confirm_path, headers=brief_headers)
     assert premature.status_code == 409
     assert premature.json()["code"] == "invalid_transition"
 
-    reviewed = client.post(f"/api/quotes/{quote['id']}/review", headers=headers)
+    reviewed = seller_client.post(f"/api/quotes/{quote['id']}/review", headers=seller_headers)
     assert reviewed.status_code == 200
     assert reviewed.json()["status"] == "REVIEWED"
 
-    confirmed = client.post(f"/api/portal/quotes/{quote['id']}/confirm", headers=portal_headers)
+    confirmed = brief_client.post(confirm_path, headers=brief_headers)
     assert confirmed.status_code == 200
     assert confirmed.json()["status"] == "CONFIRMED"
 
-    again = client.post(f"/api/portal/quotes/{quote['id']}/confirm", headers=portal_headers)
+    again = brief_client.post(confirm_path, headers=brief_headers)
     assert again.status_code == 409
 
-    seller_view = client.get(f"/api/quotes/{quote['id']}")
+    seller_view = seller_client.get(f"/api/quotes/{quote['id']}")
     assert seller_view.status_code == 200
     assert seller_view.json()["status"] == "CONFIRMED"
     assert seller_view.json()["confirmed_at"] is not None
 
 
-def test_structured_change_updates_the_recorded_budget(
-    client: TestClient, seller, rules
-) -> None:
-    headers = _sign_in(client)
-    requirement_id, portal_headers = _intake(client)
+def test_structured_change_updates_the_recorded_budget(seller, rules) -> None:
+    seller_client, seller_headers = seller_browser()
+    brief_client, brief_headers = client_browser()
+    requirement_id = create_brief(brief_client, brief_headers)
 
-    response = client.post(
-        "/api/portal/messages",
+    response = brief_client.post(
+        f"/api/portal/{requirement_id}/messages",
         json={
             "body": "The owner approved a bigger budget: 800 dollars.",
             "expected_revision": 1,
             "budget_minor": 80000,
             "assets_ready": True,
         },
-        headers=portal_headers,
+        headers=brief_headers,
     )
     assert response.status_code == 201, response.text
     assert response.json()["revision"] == 2
     assert response.json()["budget_minor"] == 80000
 
-    view = client.get("/api/portal", headers=portal_headers).json()
+    view = brief_client.get(f"/api/portal/{requirement_id}").json()
     assert view["requirement"]["budget_minor"] == 80000
 
-    repriced = _proposal(client, requirement_id, headers, label="Three pages", pages=3)
+    repriced = _proposal(
+        seller_client, requirement_id, seller_headers, label="Three pages", pages=3
+    )
     assert repriced["feasible"] is True
     assert repriced["total_minor"] == 70000
 
 
-def test_new_revision_supersedes_the_open_draft(client: TestClient, seller, rules) -> None:
-    headers = _sign_in(client)
-    requirement_id, portal_headers = _intake(client)
-    proposal = _proposal(client, requirement_id, headers)
+def test_new_revision_supersedes_the_open_draft(seller, rules) -> None:
+    seller_client, seller_headers = seller_browser()
+    brief_client, brief_headers = client_browser()
+    requirement_id = create_brief(brief_client, brief_headers)
+    proposal = _proposal(seller_client, requirement_id, seller_headers)
 
-    quote = client.post(
+    quote = seller_client.post(
         f"/api/requirements/{requirement_id}/quotes",
         json={"proposal_id": proposal["id"]},
-        headers=headers,
+        headers=seller_headers,
     ).json()
 
-    appended = client.post(
-        "/api/portal/messages",
+    appended = brief_client.post(
+        f"/api/portal/{requirement_id}/messages",
         json={"body": "We also need a contact form.", "expected_revision": 1},
-        headers=portal_headers,
+        headers=brief_headers,
     )
     assert appended.status_code == 201
     assert appended.json()["revision"] == 2
 
-    stale = client.post(
-        "/api/portal/messages",
+    stale = brief_client.post(
+        f"/api/portal/{requirement_id}/messages",
         json={"body": "And a blog?", "expected_revision": 1},
-        headers=portal_headers,
+        headers=brief_headers,
     )
     assert stale.status_code == 409
     assert stale.json()["code"] == "revision_conflict"
 
-    view = client.get("/api/portal", headers=portal_headers).json()
+    view = brief_client.get(f"/api/portal/{requirement_id}").json()
     superseded = next(item for item in view["quotes"] if item["id"] == quote["id"])
     assert superseded["status"] == "SUPERSEDED"
     assert view["requirement"]["revision"] == 2

@@ -1,4 +1,4 @@
-"""Payment endpoints for the client portal and the seller console."""
+"""Payment endpoints for the client's brief pages and the seller console."""
 
 from __future__ import annotations
 
@@ -7,30 +7,42 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, Header
 from sqlalchemy.orm import Session
 
-from app.api.deps import SellerAuth, require_csrf, require_customer, require_seller
+from app.api.deps import (
+    UserAuth,
+    require_client,
+    require_client_csrf,
+    require_csrf,
+    require_seller,
+)
 from app.core.db import get_db
 from app.payments import service
 from app.payments.schemas import (
+    AttentionPaymentOut,
     ClosePaymentRequest,
     PaymentOut,
     SnapshotEnvelope,
     SnapshotOut,
 )
 from app.requirements.models import Requirement
-from app.requirements.service import load_for_seller
+from app.requirements.service import load_for_client, load_for_seller
 
 router = APIRouter(tags=["payments"])
 
 
-@router.post("/portal/quotes/{quote_id}/payment-attempts", response_model=PaymentOut)
+@router.post(
+    "/portal/requirements/{requirement_id}/quotes/{quote_id}/payment-attempts",
+    response_model=PaymentOut,
+)
 def create_payment_attempt(
+    requirement_id: UUID,
     quote_id: UUID,
     idempotency_key: str = Header(
         alias="Idempotency-Key", min_length=8, max_length=80
     ),
-    requirement: Requirement = Depends(require_customer),
+    auth: UserAuth = Depends(require_client_csrf),
     db: Session = Depends(get_db),
 ) -> PaymentOut:
+    requirement = load_for_client(db, requirement_id, auth.user.id)
     attempt = service.start_payment(db, requirement, quote_id, idempotency_key)
     return service.serialize_attempt(attempt)
 
@@ -38,27 +50,37 @@ def create_payment_attempt(
 @router.get("/portal/payments/{payment_id}", response_model=PaymentOut)
 def read_payment(
     payment_id: UUID,
-    requirement: Requirement = Depends(require_customer),
+    auth: UserAuth = Depends(require_client),
     db: Session = Depends(get_db),
 ) -> PaymentOut:
-    attempt = service.load_for_requirement(db, requirement, payment_id)
+    attempt = service.load_for_client(db, payment_id, auth.user.id)
     return service.serialize_attempt(attempt)
 
 
 @router.post("/portal/payments/{payment_id}/capture", response_model=PaymentOut)
 def capture_payment(
     payment_id: UUID,
-    requirement: Requirement = Depends(require_customer),
+    auth: UserAuth = Depends(require_client_csrf),
     db: Session = Depends(get_db),
 ) -> PaymentOut:
-    attempt = service.capture_payment(db, requirement, payment_id)
-    return service.serialize_attempt(attempt)
+    attempt = service.load_for_client(db, payment_id, auth.user.id)
+    requirement = db.get(Requirement, attempt.requirement_id)
+    captured = service.capture_payment(db, requirement, payment_id)
+    return service.serialize_attempt(captured)
+
+
+@router.get("/payments/attention", response_model=list[AttentionPaymentOut])
+def list_attention(
+    auth: UserAuth = Depends(require_seller),
+    db: Session = Depends(get_db),
+) -> list[AttentionPaymentOut]:
+    return service.list_attention(db, auth.user.id)
 
 
 @router.post("/payments/{payment_id}/reconcile", response_model=PaymentOut)
 def reconcile_payment(
     payment_id: UUID,
-    auth: SellerAuth = Depends(require_csrf),
+    auth: UserAuth = Depends(require_csrf),
     db: Session = Depends(get_db),
 ) -> PaymentOut:
     attempt = service.reconcile_payment(db, payment_id, auth.user.id)
@@ -68,7 +90,7 @@ def reconcile_payment(
 @router.post("/payments/{payment_id}/retry-create", response_model=PaymentOut)
 def retry_create_order(
     payment_id: UUID,
-    auth: SellerAuth = Depends(require_csrf),
+    auth: UserAuth = Depends(require_csrf),
     db: Session = Depends(get_db),
 ) -> PaymentOut:
     attempt = service.retry_create(db, payment_id, auth.user.id)
@@ -79,7 +101,7 @@ def retry_create_order(
 def close_payment(
     payment_id: UUID,
     payload: ClosePaymentRequest,
-    auth: SellerAuth = Depends(require_csrf),
+    auth: UserAuth = Depends(require_csrf),
     db: Session = Depends(get_db),
 ) -> PaymentOut:
     attempt = service.close_attempt(
@@ -95,7 +117,7 @@ def close_payment(
 @router.get("/requirements/{requirement_id}/payments", response_model=list[PaymentOut])
 def list_payments(
     requirement_id: UUID,
-    auth: SellerAuth = Depends(require_seller),
+    auth: UserAuth = Depends(require_seller),
     db: Session = Depends(get_db),
 ) -> list[PaymentOut]:
     requirement = load_for_seller(db, requirement_id, auth.user.id)
@@ -105,7 +127,7 @@ def list_payments(
 @router.get("/requirements/{requirement_id}/order", response_model=SnapshotEnvelope)
 def read_requirement_order(
     requirement_id: UUID,
-    auth: SellerAuth = Depends(require_seller),
+    auth: UserAuth = Depends(require_seller),
     db: Session = Depends(get_db),
 ) -> SnapshotEnvelope:
     requirement = load_for_seller(db, requirement_id, auth.user.id)
@@ -118,7 +140,7 @@ def read_requirement_order(
 @router.get("/orders/{snapshot_id}", response_model=SnapshotOut)
 def read_order(
     snapshot_id: UUID,
-    auth: SellerAuth = Depends(require_seller),
+    auth: UserAuth = Depends(require_seller),
     db: Session = Depends(get_db),
 ) -> SnapshotOut:
     snapshot = service.load_snapshot_for_seller(db, snapshot_id, auth.user.id)

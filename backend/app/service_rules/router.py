@@ -1,4 +1,4 @@
-"""Public read of the rule set the pricing is based on."""
+"""Public read of the rule set and the public scope estimator."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.db import get_db
 from app.service_rules import service
-from app.service_rules.schemas import ServiceRuleOut
+from app.service_rules.schemas import EstimateOut, EstimateRequest, ServiceRuleOut
 
 router = APIRouter(tags=["service-rules"])
 
@@ -16,3 +16,8 @@ router = APIRouter(tags=["service-rules"])
 def read_service_rules(db: Session = Depends(get_db)) -> ServiceRuleOut:
     row = service.get_active_rules(db)
     return ServiceRuleOut(**service.serialize(row))
+
+
+@router.post("/service-rules/estimate", response_model=EstimateOut)
+def estimate_scope(payload: EstimateRequest, db: Session = Depends(get_db)) -> EstimateOut:
+    return EstimateOut(**service.estimate(db, payload.pages, payload.addon_codes))

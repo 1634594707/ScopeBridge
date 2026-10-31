@@ -1,124 +1,148 @@
-# ScopeBridge 开发记录
+# ScopeBridge development record
 
-**本文记录当前实现，随代码更新。** 规划与验收标准在 `FORMAL_PROPOSAL.md`（v3.0）；开工前的旧基线已归档到
-`archive/PROJECT_PLAN-v2.md`；给评委的英文入口是根 `README.md`。
+**This document records the current implementation and is updated with the code.** Planning and
+acceptance criteria live in `FORMAL_PROPOSAL.md` (v3.0); the pre-work baseline is archived at
+`archive/PROJECT_PLAN-v2.md`; the English entry point for judges is the root `README.md`.
 
-## 里程碑状态
+## Milestone status
 
-| 里程碑 | 内容 | 状态 |
+| Milestone | Contents | Status |
 | --- | --- | --- |
-| M0 | 脚手架：uv + FastAPI + SQLAlchemy/Alembic、Vite/React/Tailwind、Docker PostgreSQL、健康检查 | 完成 |
-| M1 | 纯函数定价与可行性验证器 + 五个固定案例 | 完成 |
-| M2 | 需求/方案/报价/审核/确认，权限与版本冲突 | 完成 |
-| M3 | 模型接入：只抽事实，服务端生成并定价候选方案 | 完成 |
-| M4 | PayPal 沙箱创建、批准、捕获与恢复 | 完成（真实沙箱已跑通一笔 $500） |
-| M5 | 版本差异、结构化改需求、19 案例双链路评测 | 完成（真实用户试用未做） |
-| M6 | 干净环境复现、演示视频、提交材料 | 待办 |
+| M0 | Scaffolding: uv + FastAPI + SQLAlchemy/Alembic, Vite/React/Tailwind, Docker PostgreSQL, health check | done |
+| M1 | Pure-function pricing and feasibility validator + five fixed cases | done |
+| M2 | Requirement / proposal / quote / review / confirm, permissions and version conflicts | done |
+| M3 | Model integration: facts only; the server builds and prices candidate options | done |
+| M4 | PayPal sandbox create, approve, capture and recovery | done (one real $500 sandbox payment) |
+| M5 | Version diff, structured change requests, 19-case two-arm evaluation | done (real user trial not run) |
+| M6 | Clean-environment reproduction, demo video, submission materials | pending |
 
-## 目录与模块
+## Layout and modules
 
 ```
 backend/app/
-  core/           配置、数据库会话、统一错误体、口令哈希
-  accounts/       卖家会话、登录限流、CSRF
-  service_rules/  不可变服务规则版本
-  requirements/   需求与修订消息（expected_revision CAS）
-  proposals/      候选方案（程序定价与裁决，每修订最多两个）
-  quotes/         报价版本、行项、状态机
-  payments/       支付尝试、核验、恢复、订单快照
-  paypal/         Orders v2 适配器（唯一发出外部 HTTP 的地方）
-  ai/             模型客户端、提示词、事实校验、候选构造
-  rules/          纯函数定价与可行性，零 IO
-frontend/src/     pages/、components/、lib/{api,types,format}
-evals/            cases.json、run_eval.py、metrics.py、reports/
+  core/           config, database session, unified error body, password hashing
+  accounts/       user accounts (seller and client), shared sessions, sign-in throttling, CSRF
+  service_rules/  immutable service rule versions and the public scope estimator
+  requirements/   requirements and revisioned messages (expected_revision CAS)
+  proposals/      candidate options (program-priced and judged, at most two per revision)
+  quotes/         quote versions, line items, state machine
+  payments/       payment attempts, verification, recovery, order snapshots
+  paypal/         Orders v2 adapter (the only place that issues external HTTP)
+  ai/             model client, prompts, fact validation, candidate construction
+  rules/          pure-function pricing and feasibility, zero IO
+frontend/src/     pages/, components/, lib/{api,types,format}
+evals/            cases.json, run_eval.py, metrics.py, reports/
 ```
 
-## 环境变量
+## Environment variables
 
-`.env`（不入库）至少包含：`DATABASE_URL`、`SESSION_SECRET`、`SELLER_PASSWORD`、`MODEL_BASE_URL`、
-`MODEL_API_KEY`、`MODEL_NAME`、`PAYPAL_CLIENT_ID`、`PAYPAL_CLIENT_SECRET`、`PAYPAL_BASE_URL`、
-`APP_BASE_URL`。可选：`PAYPAL_MERCHANT_ID`、`PAYPAL_TIMEOUT_SECONDS`、`ARGON2_MEMORY_COST`。
+`.env` (not tracked) contains at least: `DATABASE_URL`, `SESSION_SECRET`, `SELLER_PASSWORD`,
+`CLIENT_EMAIL`, `CLIENT_PASSWORD`, `MODEL_BASE_URL`, `MODEL_API_KEY`, `MODEL_NAME`,
+`PAYPAL_CLIENT_ID`, `PAYPAL_CLIENT_SECRET`, `PAYPAL_BASE_URL`, `APP_BASE_URL`. Optional:
+`PAYPAL_MERCHANT_ID`, `PAYPAL_TIMEOUT_SECONDS`, `ARGON2_MEMORY_COST`.
 
-`APP_BASE_URL` 必须与浏览器实际打开的地址一致（预览 4173 / 开发 5173）：PayPal 会把买家送回
-`{APP_BASE_URL}/pay/{attempt_id}`。
+`APP_BASE_URL` must match the address actually opened in the browser (4173 for preview, 5173 for
+dev): PayPal sends the buyer back to `{APP_BASE_URL}/pay/{attempt_id}`.
 
-## 数据模型（实际）
+## Data model (as implemented)
 
-| 表 | 要点 |
+| Table | Notes |
 | --- | --- |
-| `service_rule_versions` | 不可变规则 JSON：基础页价、加页价、加项目录、能力列表、排除项、交期 |
-| `requirements` / `requirement_messages` | 单需求一条 portal token（仅存哈希）；消息带预算、交期、素材状态、修订号 |
-| `proposals` | 方案与规则版本绑定，含包含项、排除项、校验结果 |
-| `quote_versions` / `quote_items` | 版本号、行项、`rule_ref`、来源消息、审核与确认时间、状态 |
-| `payment_attempts` | 幂等键、PayPal order/capture id、状态、`retry_count`、人工结案人与依据 |
-| `order_snapshots` | 每笔成功支付唯一；与 `PAID` 同一事务写入，之后不可改 |
-| `ai_extractions` | 每次模型调用：模型名、提示词版本、输入消息 id、原始输出、解析结果、错误码、耗时 |
+| `service_rule_versions` | Immutable rule JSON: base page price, extra page price, add-on catalogue, capability list, exclusions, lead time |
+| `users` | One table for both roles (`role` = `SELLER` or `CLIENT`); the seller is the single seeded operator, clients register themselves |
+| `user_sessions` | One session table for both roles: SHA-256 token hash, CSRF token, expiry (12 h) |
+| `requirements` / `requirement_messages` | `seller_id` (the desk) and `client_id` (the owner); `status` moves `OPEN → CLOSED` when the order snapshot is written; messages carry budget, deadline, asset state, revision number |
+| `proposals` | Options bound to a rule version, with inclusions, exclusions, validation results |
+| `quote_versions` / `quote_items` | Version number, line items, `rule_ref`, source messages, review/confirmation times, state |
+| `payment_attempts` | Idempotency key, PayPal order/capture id, state, `retry_count`, closing seller and rationale |
+| `order_snapshots` | Unique per successful payment; written in the same transaction as `PAID`, immutable afterwards |
+| `ai_extractions` | Every model call: model name, prompt version, input message ids, raw output, parsed result, error code, latency |
 
-## API（当前实现）
+## API (as implemented)
 
-| 方法与路径 | 权限 |
+| Method and path | Permission |
 | --- | --- |
-| `POST/GET/DELETE /api/session` | 卖家 |
-| `GET /api/service-rules` | 公开 |
-| `POST /api/requirements` | 公开（一次性返回 portal token） |
-| `GET /api/requirements`、`GET /api/requirements/{id}` | 卖家 |
-| `POST /api/requirements/{id}/messages` | 卖家（CSRF） |
-| `POST /api/requirements/{id}/proposals` | 卖家（CSRF） |
-| `POST /api/requirements/{id}/extractions`、`GET .../latest` | 卖家（CSRF） |
-| `POST /api/requirements/{id}/quotes` | 卖家（CSRF） |
-| `POST /api/quotes/{id}/review` | 卖家（CSRF） |
-| `GET /api/portal`、`POST /api/portal/messages` | 客户令牌 |
-| `POST /api/portal/proposals/{id}/select` | 客户令牌 |
-| `POST /api/portal/quotes/{id}/confirm` | 客户令牌 |
-| `POST /api/portal/quotes/{id}/payment-attempts` | 客户令牌 + `Idempotency-Key` |
-| `GET /api/portal/payments/{id}`、`POST .../capture` | 客户令牌 |
-| `POST /api/payments/{id}/reconcile` / `/retry-create` / `/close` | 卖家（CSRF） |
-| `GET /api/requirements/{id}/payments`、`/order` | 卖家 |
-| `GET /api/orders/{id}` | 卖家 |
-| `GET /api/health` | 公开 |
+| `POST /api/session`, `POST /api/client-session` | seller / client sign-in (shared throttling) |
+| `POST /api/clients` | public — client registration, opens the first session |
+| `GET /api/session` | any signed-in account (returns `{account, csrf_token}` with the role) |
+| `DELETE /api/session` | any signed-in account (CSRF) |
+| `GET /api/service-rules` | public |
+| `POST /api/service-rules/estimate` | public; prices a hypothetical scope from `pages` + `addon_codes` only (no amount in the request) |
+| `POST /api/requirements` | client (CSRF); the brief is owned by the signed-in client |
+| `GET /api/requirements` | seller; each summary carries `deletable` (false once an order snapshot exists) |
+| `GET /api/requirements/{id}` | seller |
+| `DELETE /api/requirements/{id}` | seller (CSRF); 409 `payment_completed` once an order snapshot exists |
+| `POST /api/requirements/{id}/messages` | seller (CSRF) |
+| `POST /api/requirements/{id}/proposals` | seller (CSRF) |
+| `POST /api/requirements/{id}/extractions`, `GET .../latest` | seller (CSRF) |
+| `POST /api/requirements/{id}/quotes` | seller (CSRF) |
+| `POST /api/quotes/{id}/review` | seller (CSRF) |
+| `GET /api/portal/briefs` | client — the client's own briefs |
+| `GET /api/portal/{requirement_id}`, `POST /api/portal/{requirement_id}/messages` | client + ownership |
+| `POST /api/portal/{requirement_id}/proposals/{id}/select` | client + ownership (CSRF) |
+| `POST /api/portal/{requirement_id}/quotes/{id}/confirm` | client + ownership (CSRF) |
+| `POST /api/portal/{requirement_id}/quotes/{id}/payment-attempts` | client + ownership (CSRF) + `Idempotency-Key` |
+| `GET /api/portal/payments/{id}`, `POST .../capture` | client + ownership (capture: CSRF) |
+| `POST /api/payments/{id}/reconcile` / `/retry-create` / `/close` | seller (CSRF) |
+| `GET /api/payments/attention` | seller; `RECONCILING` / `FAILED` attempts on quotes that are not yet `PAID`, with client and quote number |
+| `GET /api/requirements/{id}/payments`, `/order` | seller |
+| `GET /api/orders/{id}` | seller |
+| `GET /api/health` | public |
 
-错误体统一为 `{code, message, details?}`；写操作带 `Idempotency-Key` 与 `expected_revision`，冲突返回 `409`。
+Error bodies are always `{code, message, details?}`; writes carry `Idempotency-Key` and
+`expected_revision`, and conflicts return `409`.
 
-## 状态机与恢复
+## State machines and recovery
 
-- 报价：`DRAFT → REVIEWED → CONFIRMED → PAYMENT_LOCKED → PAID`，修订变更使草稿 `SUPERSEDED`。
-  解锁只有两条路径：服务端核验出「确定未成功捕获」，或卖家核对 PayPal 后人工结案。
-- 支付：`CREATING → AWAITING_APPROVAL → CAPTURING → COMPLETED`；结果不明进入 `RECONCILING`；
-  确定失败进入 `FAILED`；人工结案进入 `ABANDONED`。
-- 创建无回执：同 `PayPal-Request-Id` 重试，最多 2 次；仍失败则人工结案（需勾选已核对 + ≥10 字依据，
-  记录结案人与时间）。
-- 捕获响应丢失：查询原订单，`COMPLETED` 补写快照，`APPROVED` 恢复捕获，`VOIDED/EXPIRED` 判失败。
+- Requirement: `OPEN → CLOSED` in the same transaction that writes the order snapshot; closing a
+  payment attempt by hand leaves the brief `OPEN` because the quote can still be paid.
+- Quote: `DRAFT → REVIEWED → CONFIRMED → PAYMENT_LOCKED → PAID`; a revision change marks open drafts
+  `SUPERSEDED`. Unlocking has exactly two paths: the server verifies a definitive "no successful
+  capture", or the seller closes the attempt manually after checking PayPal.
+- Payment: `CREATING → AWAITING_APPROVAL → CAPTURING → COMPLETED`; unknown outcomes enter
+  `RECONCILING`; definitive failures enter `FAILED`; manual closing enters `ABANDONED`.
+- Create with no receipt: retry with the same `PayPal-Request-Id`, at most 2 times; still failing
+  goes to manual closing (requires the "checked" checkbox + a rationale of at least 10 characters,
+  recording who closed it and when).
+- Lost capture response: query the original order; `COMPLETED` backfills the snapshot, `APPROVED`
+  resumes the capture, `VOIDED`/`EXPIRED` is judged a failure.
 
-## 模型契约
+## Model contract
 
-- 提示词版本：`facts-v7`。模型只返回五个键：`pages`、`budget_usd`、`deadline_days`、`assets_ready`、
-  `features`；`extra="forbid"`，散文、代码围栏、多余键一律 `422`。
-- **契约必须随用户消息一起发送**：实测该网关不传达 system 消息，模型只看到简报就会自造 schema。
-  改提示词措辞无效，改通道才有效（解析率 47% → 100%）。
-- 候选方案由 `app/ai/candidates.py` 构造，`app/rules` 定价；模型的金额一律丢弃。
+- Prompt version: `facts-v7`. The model returns exactly five keys: `pages`, `budget_usd`,
+  `deadline_days`, `assets_ready`, `features`; `extra="forbid"` — prose, code fences and extra keys
+  are all `422`.
+- **The contract must travel with the user message**: measured on this gateway, system messages are
+  not delivered, so given only the brief the model invents its own schema. Re-wording the prompt did
+  nothing; changing the channel did (parse rate 47% → 100%).
+- Candidate options are built by `app/ai/candidates.py` and priced by `app/rules`; any amount from
+  the model is discarded.
 
-## 评测
+## Evaluation
 
-19 个规则级案例（`evals/cases.json`）+ 1 个流程级案例（由接口测试覆盖）。`evals/metrics.py` 定义口径：
-所有比例以「调用次数」为分母，管线的不安全放行由运行期重新复算得到，不做硬编码。
+19 rule-level cases (`evals/cases.json`) + 1 flow-level case (covered by the API tests).
+`evals/metrics.py` defines the measurement basis: every rate uses **call count** as its denominator,
+and the pipeline's unsafe releases are recomputed at runtime by calling `evaluate` again — never
+hardcoded.
 
 ```bash
 cd backend
 uv run python ../evals/run_eval.py --runs 1 --workers 1 --timeout 90 --pause 1 --tag <label>
 ```
 
-报告落在 `evals/reports/<时间戳>[-<tag>].{json,md}`。
+Reports land in `evals/reports/<timestamp>[-<tag>].{json,md}`.
 
-## 与初版计划的偏差
+## Deviations from the original plan
 
-| 计划 | 实际 | 原因 |
+| Planned | Actual | Reason |
 | --- | --- | --- |
-| 模型输出候选方案 + 依据 | 模型只出事实，服务端构造候选 | 嵌套输出在该网关上不稳定；组合判断本质是规则问题 |
-| 支付端点挂在 `/api/quotes/{id}/payment-attempts` | 挂在 `/api/portal/quotes/{id}/payment-attempts` | 发起者是客户，权限路径必须与客户身份一致 |
-| 客户端提交金额 | 请求体无金额字段 | 金额唯一来源是规则层 |
-| 评测每例 3 次 | 已记录为 1 次全量 | 网关超时导致多次尝试中断；报告已标注，未以多次结果充数 |
+| Model outputs candidate options + evidence | Model outputs facts only; the server builds candidates | Nested output is unstable on this gateway; the combinatorial judgement is inherently a rules problem |
+| Payment endpoint at `/api/quotes/{id}/payment-attempts` | Moved to `/api/portal/quotes/{id}/payment-attempts` | The initiator is the client, so the permission path must match the client identity |
+| Client submits the amount | The request body has no amount field | The rules layer is the single source of amounts |
+| Evaluation runs each case 3 times | Recorded as 1 full run | Gateway timeouts broke multi-run attempts; the report says so, and single-run numbers were not padded |
+| No registration; clients hold a private link per requirement (proposal v3.0 §6/§7) | Client accounts: both sides sign in, briefs are owned by the client account, portal-token auth removed | Product decision on 2026-10-31: attribution to a signed-in identity is what makes the record auditable ("对账"); ownership checks replace the unguessable-link mechanism |
 
-## 提交前的验证命令
+## Verification commands before submitting
 
 ```bash
 cd backend && uv run pytest -q && uv run ruff check .

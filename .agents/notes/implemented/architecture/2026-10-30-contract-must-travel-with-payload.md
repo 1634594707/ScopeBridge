@@ -1,37 +1,67 @@
-# Agent Note: 输出契约必须随用户消息一起发送
+# Agent Note: The output contract must travel with the user message
 
 Status: implemented
 
 ## Problem
 
-固定 19 个案例的评测里，事实抽取只有 7–9 条能解析（37%–47%），失败样本几乎都是模型自造的项目报告结构：`{"client": ..., "project": ..., "brief_summary": ...}`，外加 markdown 代码围栏。同一份提示词在一段长简报上曾 5/5 成功，说明契约本身写得不够并不成立。
+In the fixed 19-case evaluation, only 7–9 fact extractions parsed (37%–47%); the failures were
+almost all the model inventing a project-report structure — `{"client": ..., "project": ...,
+"brief_summary": ...}` — wrapped in markdown code fences. The same prompt had succeeded 5/5 on one
+long brief earlier, so "the contract is badly written" did not hold.
 
-排查发现：契约只写在 system 消息里，而这个 OpenAI 兼容网关（`api.uselunora.com`）在多轮实验中没有把 system 指令传达给模型——模型只能看到用户消息里的一段简报，于是把它当成「要总结的文档」。这也解释了此前若干「人格化提示词导致散文」的观察：真正被忽略的是 system 通道，而不是措辞。
+Investigation found the contract was written only in the system message, and this OpenAI-compatible
+gateway (`api.uselunora.com`) never delivered system instructions to the model across repeated
+experiments — the model only saw the brief inside the user message and treated it as "a document to
+summarise". This also explains earlier observations that "persona-style prompts produced prose":
+what was actually ignored was the system channel, not the wording.
 
 ## Decision
 
-**契约同时出现在 system 与 user 消息中，用户消息以契约开头、以简报结尾。**
+**The contract appears in both the system and the user message; the user message starts with the
+contract and ends with the brief.**
 
-`build_user_prompt()` 现在返回 `SYSTEM_PROMPT + "\n\n" + 简报`。评测脚本的 baseline 链路同样把报价契约前置到用户消息。除此之外行为不变：仍然一次调用、不自动重试、不剥离代码围栏、不猜测字段名；不合契约的返回一律 `422 model_output_invalid` 并记录原始输出。
+`build_user_prompt()` now returns `SYSTEM_PROMPT + "\n\n" + brief`. The eval script's baseline arm
+likewise puts its quoting contract at the front of the user message. Everything else is unchanged:
+still one call, no automatic retry, no code-fence stripping, no field-name guessing; any
+non-conforming reply is `422 model_output_invalid` with the raw output recorded.
 
-提示词版本记为 `facts-v7`，评测口径 `metrics v2`。
+Prompt version is `facts-v7`, measurement basis `metrics v2`.
 
 ## Alternatives considered
 
-1. **只在 system 里把契约写得更强硬**（v7 第一版）。最强理由：不重复内容，token 更省，符合常规 OpenAI 用法。放弃原因：实测解析率从 47% 降到 42%，说明问题不在措辞；继续调措辞是在错误的层面上优化。
-2. **剥离 markdown 代码围栏后宽松解析**。最强理由：失败样本里有相当比例是「围栏 + 自造 schema」，去掉围栏能救回一部分。放弃原因：只解决格式、解决不了 schema 漂移；更糟的是会让「模型不遵守契约」变得不可见。
-3. **增加一次修复调用（把模型输出回喂，要求转成契约）**。最强理由：能显著提高最终可用率，且失败可度量。放弃原因：翻倍成本与延迟；在契约已生效（100%）之后不再需要。若未来网关再次漂移，可作为独立阶段重新评估。
-4. **更换模型或供应商**。最强理由：最直接。放弃原因：用户明确本轮只优化、不换模型；且根因已定位在消息通道，换模型会掩盖真正的问题。
+1. **Make the contract sterner in the system message only** (first v7). Strongest case: no
+   duplication, fewer tokens, matches conventional OpenAI usage. Rejected: measured parse rate went
+   from 47% to 42%, proving the problem is not wording; tuning wording further optimises the wrong
+   layer.
+2. **Strip markdown code fences and parse leniently**. Strongest case: a good share of failures were
+   "fences + invented schema", and removing fences would rescue some. Rejected: it only fixes
+   formatting, not schema drift; worse, it makes "the model ignored the contract" invisible.
+3. **Add one repair call (feed the model's output back, ask for the contract shape)**. Strongest
+   case: materially higher final usability with measurable failures. Rejected: doubles cost and
+   latency; unnecessary now that the contract holds at 100%. If the gateway drifts again, it can be
+   re-evaluated as a separate stage.
+4. **Change model or provider**. Strongest case: the most direct fix. Rejected: the user explicitly
+   scoped this round to optimise, not to switch models; the root cause was the message channel, and
+   switching models would mask it.
 
 ## Consequences
 
-- 收益：同一批 19 案例，pipeline 解析率从 47% 提升到 **100%**；baseline 也从不可用提升到 95%（唯一失败是传输错误）。提示词成本每例增加约 200 token。
-- 代价：契约在两条消息里重复，修改时必须同步（`SYSTEM_PROMPT` 是唯一来源，`build_user_prompt` 直接引用它）。
-- 已知限制：这是对本网关行为的适配，不是通用结论；换到真正遵守 system 消息的供应商时，重复契约无害但略显冗余，可在评测里再确认一次。
-- 监控：`ai_extractions` 保留每次原始输出与错误码；解析率下降时应先检查消息通道，再改措辞。
+- Benefit: on the same 19 cases, pipeline parse rate went from 47% to **100%**; baseline also went
+  from unusable to 95% (the only failure was a transport error). Prompt cost rises by about 200
+  tokens per case.
+- Cost: the contract is duplicated in two messages and must be edited in sync (`SYSTEM_PROMPT` is
+  the single source; `build_user_prompt` references it directly).
+- Known limitation: this is an adaptation to this gateway's behaviour, not a general conclusion; on
+  a provider that truly honours system messages the duplicate contract is harmless but slightly
+  redundant — worth re-confirming in the evaluation.
+- Monitoring: `ai_extractions` keeps every raw output and error code; when parse rate drops, check
+  the message channel first, wording second.
 
 ## Verification
 
-- `evals/reports/20261030T150712Z-facts-v7-inline.md`：pipeline 19/19 解析成功，平均 4.1 s。
-- `evals/reports/20261030T151055Z-facts-v7-inline-both.md`：baseline 18/19（1 次传输错误），pipeline 19/19；baseline 有 2 次把规则拒绝的方案说成可行，pipeline 的独立复算违规数为 0。
-- `backend/tests/test_ai_extraction.py` 仍然以 mock 覆盖契约拒绝路径（散文、多余键、越界页数）。
+- `evals/reports/20261030T150712Z-facts-v7-inline.md`: pipeline 19/19 parsed, average 4.1 s.
+- `evals/reports/20261030T151055Z-facts-v7-inline-both.md`: baseline 18/19 (1 transport error),
+  pipeline 19/19; baseline twice called rule-rejected scopes feasible; the pipeline's independently
+  recomputed violation count is 0.
+- `backend/tests/test_ai_extraction.py` still covers the contract-rejection paths with mocks (prose,
+  extra keys, out-of-range pages).

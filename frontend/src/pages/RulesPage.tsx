@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
-import { api } from "../lib/api";
+import { api, ApiError } from "../lib/api";
 import { Card } from "../components/Card";
+import { ScopeEstimator } from "../components/ScopeEstimator";
 import { Money } from "../components/Money";
 import { PageHeader } from "../components/PageHeader";
 import { Tag } from "../components/Tag";
@@ -13,7 +14,13 @@ export default function RulesPage() {
   }
 
   if (!rules.data) {
-    return <div className="py-20 text-sm text-flag-bad">The price list could not be loaded.</div>;
+    const code = rules.error instanceof ApiError ? rules.error.code : null;
+    return (
+      <div className="py-20 text-sm text-flag-bad">
+        The price list could not be loaded. Check that the API is running and try again.
+        {code ? <span className="mt-2 block font-mono text-[11px] text-ink-faint">code · {code}</span> : null}
+      </div>
+    );
   }
 
   const data = rules.data;
@@ -132,6 +139,10 @@ export default function RulesPage() {
             </p>
           </Card>
         </div>
+      </div>
+
+      <div className="mt-6">
+        <ScopeEstimator rules={data} />
       </div>
     </div>
   );
