@@ -155,18 +155,24 @@ export const api = {
   ) => request<Message>(`/portal/${requirementId}/messages`, { method: "POST", body: payload }),
 
   selectProposal: (requirementId: string, proposalId: string) =>
-    request<Proposal>(`/portal/${requirementId}/proposals/${proposalId}/select`, {
-      method: "POST",
-    }),
+    request<Proposal>(
+      `/portal/requirements/${requirementId}/proposals/${proposalId}/select`,
+      { method: "POST" },
+    ),
 
   confirmQuote: (requirementId: string, quoteId: string) =>
-    request<Quote>(`/portal/${requirementId}/quotes/${quoteId}/confirm`, { method: "POST" }),
+    request<Quote>(`/portal/requirements/${requirementId}/quotes/${quoteId}/confirm`, {
+      method: "POST",
+    }),
 
   startPayment: (requirementId: string, quoteId: string, idempotencyKey: string) =>
-    request<Payment>(`/portal/${requirementId}/quotes/${quoteId}/payment-attempts`, {
-      method: "POST",
-      headers: { "Idempotency-Key": idempotencyKey },
-    }),
+    request<Payment>(
+      `/portal/requirements/${requirementId}/quotes/${quoteId}/payment-attempts`,
+      {
+        method: "POST",
+        headers: { "Idempotency-Key": idempotencyKey },
+      },
+    ),
 
   payment: (id: string) => request<Payment>(`/portal/payments/${id}`),
 
