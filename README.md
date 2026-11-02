@@ -11,8 +11,10 @@ human reviews, and only the client confirms.** Every line on a quote points back
 priced it and the client message that justified it.
 
 > Documentation index: `docs/README.md` — formal proposal `docs/FORMAL_PROPOSAL.md`, development
-> record `docs/DEVELOPMENT.md`, demo script `docs/DEMO_SCRIPT.md`, diagrams
-> `docs/architecture.html` / `docs/workflow.html`, historical documents in `docs/archive/`.
+> record `docs/DEVELOPMENT.md`, M6 runbook `docs/M6_RUNBOOK.md`, demo script `docs/DEMO_SCRIPT.md`,
+> compliance table `docs/SUBMISSION_COMPLIANCE.md`, Devpost draft `docs/SUBMISSION_DRAFT.md`,
+> diagrams `docs/architecture.html` / `docs/workflow.html`, historical documents in
+> `docs/archive/`.
 
 ![Landing page](docs/screenshots/01-landing.png)
 
@@ -89,7 +91,7 @@ reconciliation are out of scope for the hackathon build.
 | M2 | requirement → scope → quote → review → confirm | done |
 | M3 | model extraction (facts only), server-built options | done |
 | M4 | PayPal sandbox create / approve / capture / recovery | done (one real $500.00 payment) |
-| M5 | version diff, structured change requests, 19-case evaluation | done (user trial not run) |
+| M5 | version diff, structured change requests, 19-case evaluation | code complete; real user trial not run |
 | M6 | clean-environment reproduction, video, submission | pending |
 
 ## Repository map
@@ -148,8 +150,9 @@ ScopeBridge/
 | ![Sign in](docs/screenshots/22-sign-in.png) | ![Start a brief](docs/screenshots/23-start-brief.png) |
 
 Unless a screenshot is named as the real capture above, the images were taken from an isolated
-demo dataset; the PayPal transport is faked for payment states so every state can be reproduced
-without charging. Only `10` and `13`–`15` come from the demo database's recorded sandbox capture.
+demo dataset; payment-state screenshots (for example 16–18 and 24) were produced with a local
+fake adapter during development and the committed build has no fault-injection switch. Only `10`
+and `13`–`15` come from the demo database's recorded sandbox capture.
 
 ---
 
@@ -206,7 +209,8 @@ Dependency direction is one-way: `router → service → rules/models`. `app/rul
 network or clock access — `today` is passed in — so model output passes through the same functions as
 a hand-typed scope.
 
-Money is always integer minor units (cents) in USD. The client never sends an amount.
+Money is always integer minor units (cents) in USD. The client never sends a quote or payment
+amount; it sends the budget and deadline it wants the studio to work against.
 
 ### Model boundary: facts, not proposals
 
@@ -290,12 +294,80 @@ pnpm exec vite preview        # http://127.0.0.1:4173
 A two-path shooting script (happy path and the "no order id" recovery) is in
 [docs/DEMO_SCRIPT.md](docs/DEMO_SCRIPT.md).
 
+## Running without credentials
+
+This path is for a judge who has no model key and no PayPal sandbox credentials. It reaches the UI,
+sign-in, briefs, manual scoping, quotes, review and client confirmation. It cannot complete a
+payment and cannot call the model; both failures are explicit, not silent.
+
+1. Copy the template and fill only the required values:
+
+   ```powershell
+   Copy-Item .env.example .env
+   # Fill DATABASE_URL, POSTGRES_PASSWORD, SESSION_SECRET, SELLER_EMAIL/PASSWORD,
+   # CLIENT_EMAIL/PASSWORD. Leave MODEL_* and PAYPAL_* empty.
+   # APP_BASE_URL must match the browser origin (5173 for dev, 4173 for preview).
+   ```
+
+2. Start PostgreSQL and wait for health:
+
+   ```powershell
+   docker compose up -d
+   docker compose ps
+   ```
+
+3. Run the backend:
+
+   ```powershell
+   cd backend
+   uv sync
+   uv run alembic upgrade head
+   uv run python -m app.seed
+   uv run uvicorn app.main:app --port 8000
+   ```
+
+4. Run the frontend in a second terminal:
+
+   ```powershell
+   cd frontend
+   pnpm install
+   pnpm dev          # http://127.0.0.1:5173
+   # or: pnpm build; pnpm exec vite preview   # http://127.0.0.1:4173
+   ```
+
+5. Open the UI, sign in as the client and studio, submit a brief, use the scope editor manually,
+   price a scope, review and issue a quote, and confirm it as the client.
+
+What works without credentials:
+
+- health, sessions, CSRF, ownership checks, briefs, manual scope pricing, quote versions, review,
+  confirmation, estimator and the closed/paid read-only rules;
+- `uv run pytest -q` and `scripts/verify.ps1` use test placeholders and a fake PayPal adapter; they
+  do not need real credentials.
+
+What stops, and how it is reported:
+
+- **Model draft**: `POST /api/requirements/{id}/extractions` returns
+  `503 {"code":"model_not_configured"}` with the message "Set MODEL_API_KEY and MODEL_NAME in .env
+  to draft with the model." The UI shows this on the model card; the manual scope editor remains.
+- **Payment**: `POST .../payment-attempts` returns `503 {"code":"paypal_not_configured"}` before
+  locking the quote. The quote stays `CONFIRMED`, the UI shows the message, and no attempt is
+  created. There is no way to reach the PayPal approval page without sandbox credentials.
+
+So the judge can evaluate the product and rule layer without credentials, but a real sandbox
+payment needs `PAYPAL_CLIENT_ID` / `PAYPAL_CLIENT_SECRET`. This is a working prototype, not a
+hosted demo.
+
 Try an infeasible scope too: three pages against a $500 budget returns
 `Scope totals $700.00 against a budget of $500.00; short by $200.00.`
 
-To demonstrate recovery without a stalled network, stop the API after the buyer approves, press
-**Confirm again** (the request fails), start the API again, then press **Verify with PayPal** in
-the seller console: the attempt moves from `VERIFYING` to `COMPLETED`.
+To demonstrate recovery without editing `.env`, start the API with a process-level
+`PAYPAL_TIMEOUT_SECONDS=0.05`, then start a payment from the client page. The create call times out,
+so the attempt appears as `RECONCILING` (shown as **Verifying** in the UI) with `create_unknown` and
+no order id. Stop the API, set `PAYPAL_TIMEOUT_SECONDS=30` in the same terminal, start it again, and
+in the seller console press **Retry create**; PayPal replays the same `PayPal-Request-Id` and returns
+the order it may already have made. If the retry still returns no order id after two attempts, press
+**Close**, write what you checked in PayPal, and the quote returns to `CONFIRMED`.
 
 ---
 
@@ -309,7 +381,7 @@ the seller console: the attempt moves from `VERIFYING` to `COMPLETED`.
 | `POST` | `/api/service-rules/estimate` | public — prices a scope from pages + add-on codes only |
 | `POST` | `/api/requirements` | client (CSRF); the brief is owned by the signed-in client |
 | `GET` | `/api/requirements` · `/api/requirements/{id}` | seller |
-| `DELETE` | `/api/requirements/{id}` | seller (CSRF); 409 once an order snapshot exists |
+| `DELETE` | `/api/requirements/{id}` | seller (CSRF); 409 once an order snapshot exists or an attempt is non-terminal/has a PayPal id |
 | `POST` | `/api/requirements/{id}/messages` | seller (CSRF) |
 | `POST` | `/api/requirements/{id}/extractions` · `GET .../extractions/latest` | seller (CSRF) |
 | `POST` | `/api/requirements/{id}/proposals` | seller (CSRF) |
@@ -335,24 +407,38 @@ Errors are always `{"code", "message", "details?"}` — no stack traces, SQL or 
 
 ```bash
 cd backend
-uv run pytest -q            # 96 tests
+uv run pytest -q            # 109 tests
 uv run ruff check .
 ```
 
+For an isolated, one-command clean run (independent compose project and volume), use
+`scripts/verify.ps1` or `scripts/verify.sh`. Path B demo data is prepared with
+`scripts/prepare-demo-pathb.ps1`; both are documented in `docs/M6_RUNBOOK.md`.
+
+Platform note: `scripts/verify.ps1` is the end-to-end verified path on Windows. `scripts/verify.sh`
+was syntax-checked with `bash -n` in a Linux container but not executed end-to-end here; the
+`.github/workflows/verify.yml` workflow is added for `ubuntu-latest` but has not run yet.
+
 - `test_pricing.py` / `test_feasibility.py` — pure rule layer (three pages = 70000 cents, budget gap,
   unsupported capability, lead time, missing information).
-- `test_state_machine.py` — every illegal quote transition returns `409`.
+- `test_state_machine.py` — key illegal quote transitions return `409`, and a confirmed quote is
+  superseded by a brief change.
 - `test_api_auth.py` — bad password, throttling, CSRF, two-sided sign-in and cross-account access.
 - `test_api_service_rules_estimate.py` — the public estimator prices from the rule version, refuses
   client-supplied amounts and reports unknown add-ons.
-- `test_api_quote_flow.py` — intake → scope → select → quote → review → confirm, plus revision
-  supersession.
-- `test_eval_cases.py` — replays the five fixed cases in `evals/cases/`.
+- `test_api_quote_flow.py` — intake → scope → select → quote → review → confirm, revision
+  supersession, seller messages preserving client facts, and asset assumptions.
+- `test_eval_cases.py` — replays the 19 fixed validation cases in `evals/cases.json`.
 - `test_ai_extraction.py` — server-built options, model money ignored, prose/extra keys/out-of-range
   pages rejected, evidence row written, empty latest draft returns `null`.
 - `test_api_payment.py` — quote lock on attempt, idempotency replay and conflict, capture writes one
   snapshot, amount mismatch stays in `RECONCILING`, lost response recovered by reconcile, declined
-  capture unlocks the quote, cross-tenant access returns 404.
+  capture unlocks the quote, capture after a decline is recorded as paid, stale `CREATING`/`CAPTURING`
+  attempts are parked, PayPal-missing config does not lock, in-flight attempts block deletion,
+  expired/revision-changed quotes cannot start payment, closed briefs reject new work, and cross-tenant
+  access returns 404.
+- `test_api_errors.py` — health and unexpected failures use the same `{code, message}` envelope and do
+  not echo exception text.
 
 Fixture cases live in `evals/cases.json` (20 cases, 19 of them rule-level) with their expected
 verdicts; changing a rule means updating the case first, not loosening the assertion.
@@ -425,7 +511,10 @@ went from 47% to 100% on the same cases, and the change is recorded in
 
 ### Known limitations
 
-- `POST /api/requirements` has no rate limit; add one before exposing the app publicly.
+- `POST /api/requirements` and `POST /api/clients` have no rate limit; add one before exposing the
+  app publicly.
+- There is no Playwright/E2E suite in this build. The browser flow is verified by the manual demo
+  script and the API tests; the frontend build is type-checked.
 - Quote immutability is enforced in the application layer, not by database triggers.
 - No audit log beyond message authorship, revisions, quote timestamps, model calls and payment
   attempts.
@@ -435,8 +524,11 @@ went from 47% to 100% on the same cases, and the change is recorded in
   "asked for but not offered" instead of being mapped silently.
 - Payments are sandbox-only. There are no webhooks: an unclear capture is resolved by the seller
   pressing **Verify with PayPal**, retrying the create call, or closing the attempt with a written
-  note. Closing a quote unlocks it only after that human check, so a quote can stay
-  `PAYMENT_LOCKED` until someone acts.
+  note. A `CREATING` or `CAPTURING` attempt left by a process stop is parked in `RECONCILING` by
+  startup/request-time recovery after 120 seconds; there is no background watchdog. Closing a quote
+  unlocks it only after that human check, so a quote can stay `PAYMENT_LOCKED` until someone acts.
+- A paid brief is terminal: later messages, proposals and quotes are rejected. New work needs a new
+  brief. A confirmed quote is superseded when a later brief revision arrives.
 - Closing an attempt is a human judgement; the server cannot prove that PayPal has no order. The
   note and the resolving seller are stored on the attempt for review.
 - No refunds, partial captures or unattended reconciliation job. `PAYPAL_MERCHANT_ID` is optional; when

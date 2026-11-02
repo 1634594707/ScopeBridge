@@ -26,6 +26,14 @@ review: an exception path that could not be walked to the end.
   of pretending success.
 - Only attempts in `RECONCILING` / `FAILED` without a capture id can be closed; anything already
   `PAID` or carrying a capture id is refused.
+- A `CREATING` / `CAPTURING` attempt that lost its process is parked in `RECONCILING` after 120
+  seconds by `recover_stale_attempts` at startup and on payment reads. `GET /api/payments/attention`
+  now includes `CREATING`, `AWAITING_APPROVAL`, `CAPTURING`, `RECONCILING` and `FAILED` (the last only
+  on unpaid quotes); the seller card shows Retry for `CREATING`/no-order, Verify for
+  `CAPTURING`/`RECONCILING` with an order id, and Close only for `RECONCILING`/`FAILED`.
+- PayPal configuration is checked before the quote locks. A missing client id/secret returns
+  `503 paypal_not_configured` with no `PaymentAttempt`; a base `PayPalError` after a lock marks the
+  attempt `FAILED` and unlocks the quote instead of leaving it stuck.
 
 ## Alternatives considered
 
@@ -74,3 +82,6 @@ review: an exception path that could not be walked to the end.
   return only PayPal order/capture ids, never tokens. Secret scanning: all 19 hits were integrity
   hashes in `pnpm-lock.yaml` and `skills-lock.json` misflagged by Twilio rules; no hits in source or
   `.env`.
+- 2026-11-02: `uv run pytest -q` → `109 passed, 2 warnings`; the added tests cover a stale
+  `CREATING` attempt becoming `RECONCILING` (`stale_timeout`), attention including
+  `AWAITING_APPROVAL`, and PayPal-not-configured leaving the quote `CONFIRMED` with no attempt.

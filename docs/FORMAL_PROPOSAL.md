@@ -285,12 +285,16 @@ capability.
 After each milestone, record changes, verified items and open items; fix failures before moving on.
 At the time of writing, no milestone is complete.
 
+Implementation status on 2026-11-02: M0–M4 code complete; M5 code complete except the real user trial;
+M6 pending. The trial has not been run and this document does not record one.
+
 ## 13. Acceptance criteria and evaluation method
 
-pytest verifies business rules and state transitions; Playwright verifies the main user flow. The
-20 fixed cases cover missing information, over-budget, unoffered capabilities, deadline conflicts
-and requirement changes. Compare single-prompt generation against propose-then-validate using the
-same inputs and service rules, three runs per case.
+pytest verifies business rules, state transitions and the API; the browser flow is covered by the
+manual demo script in this build (Playwright is not implemented). The 20 fixed cases cover missing
+information, over-budget, unoffered capabilities, deadline conflicts and requirement changes.
+Compare single-prompt generation against propose-then-validate using the same inputs and service
+rules; the recorded build has one run per case, recorded as a deviation in `DEVELOPMENT.md`.
 
 Record the generated-option violation rate, the final released violation rate, the feasible-option
 ratio, no-solution identification, average and P95 latency, actual token usage and cost estimates.

@@ -36,6 +36,19 @@ snapshot plus `PAID` commit in one transaction. The same key on a different quot
 unlock; the quote returns to `CONFIRMED` only after the server verifies a definitive "no successful
 capture".
 
+## 原子收尾与残留状态恢复
+
+- `_finalize` 在同一个事务里写 `COMPLETED`、`PAID`、`CLOSED` 和快照。状态更新是条件更新：
+  `_mark` 永远不会覆盖已经 `COMPLETED` 的尝试；`_finalize` 只写 `COMPLETED`，所以它可以修复
+  之前被失败路径解锁成 `CONFIRMED` 的报价，而不是在 PayPal 已扣款后再抛 `409`。
+- `ORDER_ALREADY_CAPTURED` 分支必须先 `get_order`，只有查询到 `COMPLETED` 才调用 `_finalize`；
+  查询失败或状态不明确时留在 `RECONCILING`，不再盲写。
+- `CREATING` / `CAPTURING` 超过 120 秒会被启动时和请求时的 `recover_stale_attempts` 转入
+  `RECONCILING`；attention 覆盖所有非终态尝试，前端为这些状态提供 Verify/Retry/Close 的明确入口。
+- PayPal 配置在锁定报价之前检查；缺少 `PAYPAL_CLIENT_ID/SECRET` 时返回
+  `503 paypal_not_configured` 且不创建 attempt。`PayPalError` 基类也会被捕获并解锁。
+- create 的 5xx 响应进入 `RECONCILING`，只有 4xx（明确拒绝）进入 `FAILED` 并解锁。
+
 ## Alternatives considered
 
 1. **Trust the browser-returned `?paypal=return` parameter directly**. Strongest case: least
@@ -79,3 +92,6 @@ capture".
 - Real sandbox (2026-10-30): created order `52192821KS579122X` returned an approve link; capturing
   before approval returned `not_approved` with the quote still `PAYMENT_LOCKED`; the seller
   verification endpoint returned `AWAITING_APPROVAL`.
+- 2026-11-02: `uv run pytest -q` → `109 passed, 2 warnings`; new coverage includes capture after a
+  declined attempt, no downgrade of `COMPLETED`, stale `CREATING` parking, PayPal-not-configured,
+  expired quote, revision-changed quote, closed brief, and the error envelope tests.
