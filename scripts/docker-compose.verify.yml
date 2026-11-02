@@ -1,0 +1,20 @@
+services:
+  db:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_USER: scopebridge
+      POSTGRES_PASSWORD: verify-password
+      POSTGRES_DB: scopebridge_verify
+    ports:
+      - "55434:5432"
+    volumes:
+      - scopebridge-verify-pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U scopebridge -d scopebridge_verify"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+volumes:
+  scopebridge-verify-pgdata:
+    # Project-scoped by `docker compose -p scopebridge-verify`; never the demo volume.
