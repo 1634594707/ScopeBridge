@@ -23,10 +23,14 @@ def test_draft_cannot_be_confirmed() -> None:
     assert error.value.code == "invalid_transition"
 
 
-def test_confirmed_quote_is_terminal() -> None:
-    for action in (QuoteAction.REVIEW, QuoteAction.CONFIRM, QuoteAction.SUPERSEDE):
+def test_confirmed_quote_rejects_review_and_confirm() -> None:
+    for action in (QuoteAction.REVIEW, QuoteAction.CONFIRM):
         with pytest.raises(ApiError):
             transition(QuoteStatus.CONFIRMED, action)
+
+
+def test_confirmed_quote_can_be_superseded_by_a_brief_change() -> None:
+    assert transition(QuoteStatus.CONFIRMED, QuoteAction.SUPERSEDE) is QuoteStatus.SUPERSEDED
 
 
 def test_superseded_quote_is_terminal() -> None:

@@ -2,10 +2,12 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import delete, select
+from sqlalchemy import delete, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, selectinload
 
 from app.core.errors import conflict, forbidden, not_found
@@ -20,6 +22,22 @@ from app.requirements.schemas import (
 
 OPEN_STATUS = "OPEN"
 CLOSED_STATUS = "CLOSED"
+
+
+def brief_is_closed(db: Session, requirement: Requirement) -> bool:
+    """A brief is closed after payment, even if a legacy row still says OPEN."""
+    if requirement.status == CLOSED_STATUS:
+        return True
+    from app.payments.models import OrderSnapshot
+
+    return (
+        db.scalar(
+            select(OrderSnapshot.id).where(
+                OrderSnapshot.requirement_id == requirement.id
+            )
+        )
+        is not None
+    )
 
 
 def create_requirement(
@@ -93,7 +111,7 @@ def delete_for_seller(db: Session, requirement: Requirement) -> None:
     A brief that has been paid carries an order snapshot, and the snapshot is
     the receipt — it must never disappear, so payment blocks the delete.
     """
-    from app.payments.models import OrderSnapshot, PaymentAttempt
+    from app.payments.models import ACTIVE_STATUSES, OrderSnapshot, PaymentAttempt
     from app.proposals.models import Proposal
     from app.quotes.models import QuoteItem, QuoteVersion
 
@@ -105,6 +123,23 @@ def delete_for_seller(db: Session, requirement: Requirement) -> None:
             "payment_completed",
             "This brief has a completed payment. The order snapshot is the "
             "receipt and cannot be deleted.",
+        )
+
+    payment_evidence = db.scalar(
+        select(PaymentAttempt.id).where(
+            PaymentAttempt.requirement_id == requirement.id,
+            or_(
+                PaymentAttempt.status.in_(ACTIVE_STATUSES),
+                PaymentAttempt.paypal_order_id.is_not(None),
+                PaymentAttempt.paypal_capture_id.is_not(None),
+            ),
+        )
+    )
+    if payment_evidence is not None:
+        raise conflict(
+            "payment_in_progress",
+            "This brief has an unresolved or recorded payment attempt. Resolve it "
+            "before deleting the brief.",
         )
 
     quote_version_ids = select(QuoteVersion.id).where(
@@ -138,6 +173,8 @@ def append_message(
     payload: AddMessageRequest,
     author: str,
 ) -> RequirementMessage:
+    if brief_is_closed(db, requirement):
+        raise conflict("brief_closed", "This brief is closed after payment.")
     if payload.expected_revision != requirement.revision:
         raise conflict(
             "revision_conflict",
@@ -148,18 +185,40 @@ def append_message(
             },
         )
 
-    latest = requirement.messages[-1] if requirement.messages else None
     budget = payload.budget_minor
     if budget is None:
-        budget = _previous(latest, "budget_minor")
-    deadline = (
-        payload.deadline if payload.deadline is not None else _previous(latest, "deadline")
+        budget = _latest_value(requirement.messages, "budget_minor")
+    deadline = payload.deadline
+    if deadline is None:
+        deadline = _latest_value(requirement.messages, "deadline")
+    assets = payload.assets_ready
+    if assets is None:
+        assets = _latest_value(requirement.messages, "assets_ready")
+
+    updated = db.execute(
+        update(Requirement)
+        .where(
+            Requirement.id == requirement.id,
+            Requirement.revision == payload.expected_revision,
+        )
+        .values(
+            revision=Requirement.revision + 1,
+            updated_at=datetime.now(UTC),
+        )
     )
-    assets = (
-        payload.assets_ready
-        if payload.assets_ready is not None
-        else _previous(latest, "assets_ready")
-    )
+    if (updated.rowcount or 0) != 1:
+        db.rollback()
+        current = db.scalar(
+            select(Requirement.revision).where(Requirement.id == requirement.id)
+        )
+        raise conflict(
+            "revision_conflict",
+            "This requirement changed since you loaded it. Reload before writing again.",
+            {
+                "expected_revision": payload.expected_revision,
+                "current_revision": current,
+            },
+        )
 
     message = RequirementMessage(
         requirement_id=requirement.id,
@@ -168,12 +227,24 @@ def append_message(
         budget_minor=budget,
         deadline=deadline,
         assets_ready=assets,
-        revision=requirement.revision + 1,
+        revision=payload.expected_revision + 1,
     )
-    requirement.revision += 1
-    requirement.messages.append(message)
     db.add(message)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        current = db.scalar(
+            select(Requirement.revision).where(Requirement.id == requirement.id)
+        )
+        raise conflict(
+            "revision_conflict",
+            "This requirement changed since you loaded it. Reload before writing again.",
+            {
+                "expected_revision": payload.expected_revision,
+                "current_revision": current,
+            },
+        ) from None
     db.refresh(requirement)
     db.refresh(message)
 
@@ -183,9 +254,13 @@ def append_message(
     return message
 
 
-def _previous(message: RequirementMessage | None, field: str) -> Any:
-    """Carry the previous message's value forward when the new one omits it."""
-    return getattr(message, field, None)
+def _latest_value(messages: list[RequirementMessage], field: str) -> Any:
+    """Carry the newest non-null value forward; a seller note must not erase it."""
+    for message in reversed(messages):
+        value = getattr(message, field, None)
+        if value is not None:
+            return value
+    return None
 
 
 def latest_client_message(requirement: Requirement) -> RequirementMessage | None:
@@ -195,19 +270,32 @@ def latest_client_message(requirement: Requirement) -> RequirementMessage | None
     )
 
 
-def receipt_requirement_ids(db: Session, requirement_ids: list[UUID]) -> set[UUID]:
-    """Briefs carrying an order snapshot; the snapshot is the receipt."""
+def undeletable_requirement_ids(db: Session, requirement_ids: list[UUID]) -> set[UUID]:
+    """Briefs that carry a receipt or an unresolved/recorded payment attempt."""
     if not requirement_ids:
         return set()
-    from app.payments.models import OrderSnapshot
+    from app.payments.models import ACTIVE_STATUSES, OrderSnapshot, PaymentAttempt
 
-    return set(
+    receipt_ids = set(
         db.scalars(
             select(OrderSnapshot.requirement_id).where(
                 OrderSnapshot.requirement_id.in_(requirement_ids)
             )
         ).all()
     )
+    attempt_ids = set(
+        db.scalars(
+            select(PaymentAttempt.requirement_id).where(
+                PaymentAttempt.requirement_id.in_(requirement_ids),
+                or_(
+                    PaymentAttempt.status.in_(ACTIVE_STATUSES),
+                    PaymentAttempt.paypal_order_id.is_not(None),
+                    PaymentAttempt.paypal_capture_id.is_not(None),
+                ),
+            )
+        ).all()
+    )
+    return receipt_ids | attempt_ids
 
 
 def summarize_for_seller(

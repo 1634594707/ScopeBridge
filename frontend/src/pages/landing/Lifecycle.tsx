@@ -36,7 +36,7 @@ const exits = [
   {
     status: "SUPERSEDED",
     title: "Brief changed",
-    body: "A new message bumps the revision. Draft and reviewed quotes are superseded, never edited; a confirmed or locked quote cannot be replaced this way.",
+    body: "A new message bumps the revision. Draft, reviewed and confirmed quotes are superseded, never edited; a locked or paid quote cannot be replaced this way.",
   },
 ];
 

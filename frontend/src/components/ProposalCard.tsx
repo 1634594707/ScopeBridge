@@ -10,14 +10,25 @@ interface ProposalCardProps {
   proposal: Proposal;
   rules: ServiceRules | undefined;
   budgetMinor: number | null;
+  clientAssetsReady: boolean | null;
   stale: boolean;
   busy: boolean;
   onSelect?: (proposal: Proposal) => void;
 }
 
-export function ProposalCard({ proposal, rules, budgetMinor, stale, busy, onSelect }: ProposalCardProps) {
+export function ProposalCard({
+  proposal,
+  rules,
+  budgetMinor,
+  clientAssetsReady,
+  stale,
+  busy,
+  onSelect,
+}: ProposalCardProps) {
   const delta = budgetMinor === null ? null : budgetMinor - proposal.total_minor;
   const selected = proposal.selected_at !== null;
+  const assetsAssumed =
+    clientAssetsReady !== null && proposal.assets_ready !== clientAssetsReady;
   const addonLabels =
     rules?.addons.filter((addon) => proposal.addon_codes.includes(addon.code)) ?? [];
 
@@ -73,6 +84,14 @@ export function ProposalCard({ proposal, rules, budgetMinor, stale, busy, onSele
           </li>
         ) : null}
       </ul>
+
+      {assetsAssumed ? (
+        <p className="rounded-md border border-flag-warn/30 bg-flag-warn/5 px-3 py-2 text-[11px] leading-relaxed text-flag-warn">
+          Studio assumption: assets {proposal.assets_ready ? "ready" : "still pending"}, while your
+          recorded state is {clientAssetsReady ? "ready" : "pending"}. The quote re-checks this
+          before it is issued.
+        </p>
+      ) : null}
 
       {delta !== null ? (
         <div className="flex items-center justify-between">

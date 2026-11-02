@@ -84,6 +84,8 @@ export default function RequirementPage() {
   const currentProposals = proposalRows.filter((row) => row.source_revision === brief.revision);
   const quoteError = createQuote.error instanceof ApiError ? createQuote.error : null;
   const replyError = addReply.error instanceof ApiError ? addReply.error : null;
+  const closed =
+    brief.status === "CLOSED" || quoteRows.some((quote) => quote.status === "PAID");
 
   return (
     <div>
@@ -146,39 +148,46 @@ export default function RequirementPage() {
 
           <Card className="px-5 py-5">
             <CardHeader eyebrow="Reply" title="Add a note to this brief" />
-            <form
-              className="mt-4 flex flex-col gap-3"
-              onSubmit={(event) => {
-                event.preventDefault();
-                if (reply.trim().length < 2) return;
-                addReply.mutate({ body: reply.trim(), expected_revision: brief.revision });
-              }}
-            >
-              <Field
-                label="Message"
-                htmlFor="seller-reply"
-                hint={`Sending creates revision ${brief.revision + 1} and supersedes any open draft quote.`}
-                error={replyError?.message}
+            {closed ? (
+              <p className="mt-4 text-[13px] leading-relaxed text-ink-muted">
+                This brief is closed after payment. Start a new brief for any further work; this
+                record stays read-only.
+              </p>
+            ) : (
+              <form
+                className="mt-4 flex flex-col gap-3"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  if (reply.trim().length < 2) return;
+                  addReply.mutate({ body: reply.trim(), expected_revision: brief.revision });
+                }}
               >
-                <TextArea
-                  id="seller-reply"
-                  value={reply}
-                  onChange={(event) => setReply(event.target.value)}
-                  placeholder="The three page version with on-site ordering is outside the $500 budget. Here is what fits."
-                  rows={3}
-                />
-              </Field>
-              <div className="flex justify-end">
-                <Button
-                  type="submit"
-                  variant="secondary"
-                  busy={addReply.isPending}
-                  icon={<MessageSquarePlus size={15} />}
+                <Field
+                  label="Message"
+                  htmlFor="seller-reply"
+                  hint={`Sending creates revision ${brief.revision + 1} and supersedes any open draft or confirmed quote.`}
+                  error={replyError?.message}
                 >
-                  Send message
-                </Button>
-              </div>
-            </form>
+                  <TextArea
+                    id="seller-reply"
+                    value={reply}
+                    onChange={(event) => setReply(event.target.value)}
+                    placeholder="The three page version with on-site ordering is outside the $500 budget. Here is what fits."
+                    rows={3}
+                  />
+                </Field>
+                <div className="flex justify-end">
+                  <Button
+                    type="submit"
+                    variant="secondary"
+                    busy={addReply.isPending}
+                    icon={<MessageSquarePlus size={15} />}
+                  >
+                    Send message
+                  </Button>
+                </div>
+              </form>
+            )}
           </Card>
 
           <Card className="overflow-hidden">
@@ -219,34 +228,47 @@ export default function RequirementPage() {
         </div>
 
         <aside className="flex flex-col gap-6">
-          <ModelDraftPanel
-            requirementId={id}
-            onUse={(candidate) =>
-              setSeed({
-                key: `${candidate.label}-${candidate.total_minor}-${Date.now()}`,
-                label: candidate.label,
-                pages: candidate.pages,
-                addons: candidate.addon_codes,
-              })
-            }
-          />
-
-          <Card className="px-5 py-5">
-            {rules.data ? (
-              <ScopeEditor
-                key={seed?.key ?? "manual"}
-                requirementId={id}
-                revision={brief.revision}
-                rules={rules.data}
-                usedAtThisRevision={currentProposals.length}
-                initialLabel={seed?.label}
-                initialPages={seed?.pages}
-                initialAddons={seed?.addons}
+          {closed ? (
+            <Card className="px-5 py-5">
+              <CardHeader
+                eyebrow="Closed"
+                title="This brief is read-only"
+                description="Payment closed this brief. New work needs a new brief, so the paid record keeps its exact scope and snapshot."
               />
-            ) : (
-              <p className="text-[13px] text-ink-faint">Loading the price list…</p>
-            )}
-          </Card>
+            </Card>
+          ) : (
+            <>
+              <ModelDraftPanel
+                requirementId={id}
+                onUse={(candidate) =>
+                  setSeed({
+                    key: `${candidate.label}-${candidate.total_minor}-${Date.now()}`,
+                    label: candidate.label,
+                    pages: candidate.pages,
+                    addons: candidate.addon_codes,
+                  })
+                }
+              />
+
+              <Card className="px-5 py-5">
+                {rules.data ? (
+                  <ScopeEditor
+                    key={seed?.key ?? "manual"}
+                    requirementId={id}
+                    revision={brief.revision}
+                    rules={rules.data}
+                    usedAtThisRevision={currentProposals.length}
+                    initialLabel={seed?.label}
+                    initialPages={seed?.pages}
+                    initialAddons={seed?.addons}
+                    initialAssetsReady={brief.assets_ready ?? false}
+                  />
+                ) : (
+                  <p className="text-[13px] text-ink-faint">Loading the price list…</p>
+                )}
+              </Card>
+            </>
+          )}
 
           <Card className="overflow-hidden">
             <div className="flex items-center justify-between border-b border-line px-5 py-4">
@@ -285,7 +307,7 @@ export default function RequirementPage() {
                           <Button
                             size="sm"
                             variant="secondary"
-                            disabled={!proposal.feasible || stale || createQuote.isPending}
+                            disabled={closed || !proposal.feasible || stale || createQuote.isPending}
                             busy={createQuote.isPending && createQuote.variables === proposal.id}
                             icon={<FileText size={13} />}
                             onClick={() => createQuote.mutate(proposal.id)}

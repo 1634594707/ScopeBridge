@@ -12,7 +12,7 @@ from typing import Any
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
-from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 logger = logging.getLogger("scopebridge.db")
@@ -83,6 +83,16 @@ def register_error_handlers(app: FastAPI) -> None:
         )
         return _envelope(exc.status_code, code, str(exc.detail), None)
 
+    @app.exception_handler(IntegrityError)
+    async def _integrity_error(_: Request, exc: IntegrityError) -> JSONResponse:
+        logger.warning("integrity conflict: %s", exc.__class__.__name__)
+        return _envelope(
+            409,
+            "conflict",
+            "The request conflicts with a record that already exists.",
+            None,
+        )
+
     @app.exception_handler(SQLAlchemyError)
     async def _db_error(_: Request, exc: SQLAlchemyError) -> JSONResponse:
         logger.exception("database error: %s", exc.__class__.__name__)
@@ -90,5 +100,15 @@ def register_error_handlers(app: FastAPI) -> None:
             503,
             "database_unavailable",
             "The database is not reachable. Check DATABASE_URL and that PostgreSQL is running.",
+            None,
+        )
+
+    @app.exception_handler(Exception)
+    async def _unexpected_error(_: Request, exc: Exception) -> JSONResponse:
+        logger.exception("unhandled error: %s", exc.__class__.__name__)
+        return _envelope(
+            500,
+            "internal_error",
+            "The request could not be completed.",
             None,
         )

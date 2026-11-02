@@ -39,7 +39,7 @@ export function ModelDraftPanel({ requirementId, onUse }: ModelDraftPanelProps) 
         <div className="flex flex-col gap-1">
           <span className="label">Model draft</span>
           <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-ink-faint">
-            {modelLabel} · {extraction?.prompt_version ?? "facts-v4"}
+            {modelLabel} · {extraction?.prompt_version ?? "facts-v7"}
           </span>
         </div>
         <Tag tone="neutral">advisory</Tag>

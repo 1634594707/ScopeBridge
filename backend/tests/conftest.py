@@ -16,6 +16,11 @@ from fastapi.testclient import TestClient
 from sqlalchemy import text
 
 os.environ.setdefault("ARGON2_MEMORY_COST", "8192")
+# Payment tests use a fake adapter; they must not require real sandbox secrets.
+os.environ.setdefault("PAYPAL_CLIENT_ID", "test-client-id")
+os.environ.setdefault("PAYPAL_CLIENT_SECRET", "test-client-secret")
+os.environ.setdefault("MODEL_API_KEY", "test-model-key")
+os.environ.setdefault("MODEL_NAME", "test-model")
 
 from app.core.config import get_settings  # noqa: E402
 

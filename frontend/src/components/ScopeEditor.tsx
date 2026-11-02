@@ -16,6 +16,7 @@ interface ScopeEditorProps {
   initialLabel?: string;
   initialPages?: number;
   initialAddons?: string[];
+  initialAssetsReady?: boolean;
 }
 
 export function ScopeEditor({
@@ -26,13 +27,14 @@ export function ScopeEditor({
   initialLabel = "",
   initialPages = 1,
   initialAddons = [],
+  initialAssetsReady = true,
 }: ScopeEditorProps) {
   const queryClient = useQueryClient();
   const [label, setLabel] = useState(initialLabel);
   const [pages, setPages] = useState(initialPages);
   const [addons, setAddons] = useState<string[]>(initialAddons);
   const [features, setFeatures] = useState<string[]>(["landing_pages"]);
-  const [assetsReady, setAssetsReady] = useState(true);
+  const [assetsReady, setAssetsReady] = useState(initialAssetsReady);
 
   const create = useMutation({
     mutationFn: () =>
@@ -127,6 +129,15 @@ export function ScopeEditor({
           </button>
         </Field>
       </div>
+
+      {assetsReady !== initialAssetsReady ? (
+        <p className="rounded-md border border-flag-warn/30 bg-flag-warn/5 px-3 py-2 text-[11px] leading-relaxed text-flag-warn">
+          You are pricing an explicit assumption: assets{" "}
+          {assetsReady ? "are ready" : "are still pending"}, while the client record says{" "}
+          {initialAssetsReady ? "ready" : "pending"}. The quote re-runs this check before it is
+          issued.
+        </p>
+      ) : null}
 
       <fieldset className="flex flex-col gap-2">
         <legend className="text-[13px] font-medium text-ink">Add-ons</legend>

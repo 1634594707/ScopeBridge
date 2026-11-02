@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
-from uuid import uuid4
+from datetime import UTC, datetime, timedelta
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
 from helpers import client_browser, create_brief, seller_browser
 
+from app.core.config import get_settings
+from app.payments.models import PaymentAttempt
+from app.payments.service import _mark
 from app.paypal import client as paypal
+from app.quotes.models import QuoteVersion
 
 ORDER_ID = "ORDER-SANDBOX-1"
 CAPTURE_ID = "CAPTURE-SANDBOX-1"
@@ -393,13 +397,16 @@ def test_attention_lists_reconciling_and_failed_attempts(seller, rules, fake_pay
     with TestClient(app) as anonymous:
         assert anonymous.get("/api/payments/attention").status_code == 401
 
-    # A resolved create moves out of the list; a declined capture moves back in.
+    # The attention list covers every non-terminal state, including the buyer's
+    # approval step; a declined capture then moves the same attempt to FAILED.
     fake_paypal["create_error"] = None
     retried = seller_client.post(
         f"/api/payments/{attempt['id']}/retry-create", headers=seller_headers
     )
     assert retried.json()["status"] == "AWAITING_APPROVAL"
-    assert seller_client.get("/api/payments/attention").json() == []
+    assert [item["status"] for item in seller_client.get("/api/payments/attention").json()] == [
+        "AWAITING_APPROVAL"
+    ]
 
     fake_paypal["capture_error"] = paypal.PayPalResponseError(
         422, {"name": "UNPROCESSABLE_ENTITY", "details": [{"issue": "INSTRUMENT_DECLINED"}]}
@@ -662,3 +669,196 @@ def test_retry_rejected_when_paypal_already_returned_an_order(seller, rules, fak
     )
     assert response.status_code == 409
     assert response.json()["code"] == "order_already_exists"
+
+
+def test_capture_after_a_declined_attempt_is_recorded_as_paid(
+    seller, rules, fake_paypal
+) -> None:
+    seller_client, seller_headers, brief_client, brief_headers, requirement_id, quote_id = (
+        _confirmed_quote()
+    )
+    attempt = brief_client.post(
+        _attempt_path(requirement_id, quote_id),
+        headers={**brief_headers, "Idempotency-Key": "recover-key-7"},
+    ).json()
+
+    fake_paypal["capture_error"] = paypal.PayPalResponseError(
+        422, {"name": "UNPROCESSABLE_ENTITY", "details": [{"issue": "INSTRUMENT_DECLINED"}]}
+    )
+    declined = brief_client.post(
+        f"/api/portal/payments/{attempt['id']}/capture", headers=brief_headers
+    )
+    assert declined.json()["status"] == "FAILED"
+    assert brief_client.get(f"/api/portal/{requirement_id}").json()["quotes"][0][
+        "status"
+    ] == "CONFIRMED"
+
+    # The buyer fixes the funding source; the same order is still APPROVED.
+    fake_paypal["capture_error"] = None
+    reconciled = seller_client.post(
+        f"/api/payments/{attempt['id']}/reconcile", headers=seller_headers
+    )
+    assert reconciled.status_code == 200, reconciled.text
+    assert reconciled.json()["status"] == "COMPLETED"
+
+    view = brief_client.get(f"/api/portal/{requirement_id}").json()
+    assert view["quotes"][0]["status"] == "PAID"
+    assert view["order"]["capture_id"] == CAPTURE_ID
+
+
+def test_completed_attempt_is_not_downgraded_by_a_late_error(
+    seller, rules, fake_paypal, db
+) -> None:
+    _, _, brief_client, brief_headers, requirement_id, quote_id = _confirmed_quote()
+    attempt = brief_client.post(
+        _attempt_path(requirement_id, quote_id),
+        headers={**brief_headers, "Idempotency-Key": "recover-key-8"},
+    ).json()
+    brief_client.post(
+        f"/api/portal/payments/{attempt['id']}/capture", headers=brief_headers
+    )
+
+    row = db.get(PaymentAttempt, UUID(attempt["id"]))
+    assert row is not None and row.status == "COMPLETED"
+    _mark(db, row, "RECONCILING", "late_error", "A late error branch must not win.")
+    assert db.get(PaymentAttempt, UUID(attempt["id"])).status == "COMPLETED"
+
+
+def test_paypal_not_configured_does_not_lock_the_quote(
+    seller, rules, fake_paypal, monkeypatch
+) -> None:
+    _, _, brief_client, brief_headers, requirement_id, quote_id = _confirmed_quote()
+    settings = get_settings().model_copy(
+        update={"paypal_client_id": "", "paypal_client_secret": ""}
+    )
+    monkeypatch.setattr("app.payments.service.get_settings", lambda: settings)
+
+    response = brief_client.post(
+        _attempt_path(requirement_id, quote_id),
+        headers={**brief_headers, "Idempotency-Key": "config-key-1"},
+    )
+    assert response.status_code == 503
+    assert response.json()["code"] == "paypal_not_configured"
+
+    view = brief_client.get(f"/api/portal/{requirement_id}").json()
+    assert view["quotes"][0]["status"] == "CONFIRMED"
+    assert view["payments"] == []
+
+
+def test_an_in_flight_attempt_blocks_brief_deletion(
+    seller, rules, fake_paypal
+) -> None:
+    seller_client, seller_headers, brief_client, brief_headers, requirement_id, quote_id = (
+        _confirmed_quote()
+    )
+    brief_client.post(
+        _attempt_path(requirement_id, quote_id),
+        headers={**brief_headers, "Idempotency-Key": "delete-key-1"},
+    )
+    response = seller_client.delete(f"/api/requirements/{requirement_id}", headers=seller_headers)
+    assert response.status_code == 409
+    assert response.json()["code"] == "payment_in_progress"
+
+
+def test_stale_creating_attempt_is_parked_for_verification(
+    seller, rules, fake_paypal, db
+) -> None:
+    seller_client, seller_headers, brief_client, brief_headers, requirement_id, quote_id = (
+        _confirmed_quote()
+    )
+    attempt = brief_client.post(
+        _attempt_path(requirement_id, quote_id),
+        headers={**brief_headers, "Idempotency-Key": "stale-key-1"},
+    ).json()
+
+    row = db.get(PaymentAttempt, UUID(attempt["id"]))
+    assert row is not None
+    row.status = "CREATING"
+    row.updated_at = datetime.now(UTC) - timedelta(seconds=300)
+    db.commit()
+
+    rows = seller_client.get("/api/payments/attention").json()
+    assert [item["status"] for item in rows] == ["RECONCILING"]
+    assert rows[0]["error_code"] == "stale_timeout"
+
+
+def test_expired_quote_cannot_start_payment(seller, rules, fake_paypal, db) -> None:
+    _, _, brief_client, brief_headers, requirement_id, quote_id = _confirmed_quote()
+    quote = db.get(QuoteVersion, UUID(quote_id))
+    assert quote is not None
+    quote.expires_at = datetime.now(UTC) - timedelta(days=1)
+    db.commit()
+
+    response = brief_client.post(
+        _attempt_path(requirement_id, quote_id),
+        headers={**brief_headers, "Idempotency-Key": "expired-key-1"},
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "quote_expired"
+
+
+def test_a_new_revision_supersedes_a_confirmed_quote(
+    seller, rules, fake_paypal
+) -> None:
+    _, _, brief_client, brief_headers, requirement_id, quote_id = _confirmed_quote()
+
+    changed = brief_client.post(
+        f"/api/portal/{requirement_id}/messages",
+        json={"body": "Please add a contact page as well.", "expected_revision": 1},
+        headers=brief_headers,
+    )
+    assert changed.status_code == 201, changed.text
+
+    view = brief_client.get(f"/api/portal/{requirement_id}").json()
+    assert next(item for item in view["quotes"] if item["id"] == quote_id)["status"] == (
+        "SUPERSEDED"
+    )
+
+    response = brief_client.post(
+        _attempt_path(requirement_id, quote_id),
+        headers={**brief_headers, "Idempotency-Key": "changed-key-1"},
+    )
+    assert response.status_code == 409
+    assert response.json()["code"] == "quote_not_payable"
+
+
+def test_a_closed_brief_rejects_new_work(seller, rules, fake_paypal) -> None:
+    seller_client, seller_headers, brief_client, brief_headers, requirement_id, quote_id = (
+        _confirmed_quote()
+    )
+    attempt = brief_client.post(
+        _attempt_path(requirement_id, quote_id),
+        headers={**brief_headers, "Idempotency-Key": "closed-key-1"},
+    ).json()
+    captured = brief_client.post(
+        f"/api/portal/payments/{attempt['id']}/capture", headers=brief_headers
+    )
+    assert captured.json()["status"] == "COMPLETED"
+    assert brief_client.get(f"/api/portal/{requirement_id}").json()["requirement"][
+        "status"
+    ] == "CLOSED"
+
+    message = seller_client.post(
+        f"/api/requirements/{requirement_id}/messages",
+        json={"body": "One more page, please.", "expected_revision": 1},
+        headers=seller_headers,
+    )
+    assert message.status_code == 409
+    assert message.json()["code"] == "brief_closed"
+
+    proposal = seller_client.post(
+        f"/api/requirements/{requirement_id}/proposals",
+        json={"label": "Another page", "pages": 1},
+        headers=seller_headers,
+    )
+    assert proposal.status_code == 409
+    assert proposal.json()["code"] == "brief_closed"
+
+    existing = seller_client.get(f"/api/requirements/{requirement_id}/proposals").json()[0]
+    quote = seller_client.post(
+        f"/api/requirements/{requirement_id}/quotes",
+        json={"proposal_id": existing["id"]},
+        headers=seller_headers,
+    )
+    assert quote.status_code == 409
+    assert quote.json()["code"] == "brief_closed"

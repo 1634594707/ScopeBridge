@@ -70,13 +70,17 @@ export function PaymentHistory({ requirementId }: { requirementId: string }) {
 
       {rows.length === 0 ? (
         <p className="px-5 py-5 text-[13px] text-ink-muted">
-          No payment attempt yet. The client starts one from their private link after confirming a
-          quote.
+          No payment attempt yet. The signed-in client starts one after confirming a quote.
         </p>
       ) : (
         <ul className="divide-y divide-line">
           {rows.map((payment) => {
-            const needsRetry = payment.status === "RECONCILING" && !payment.paypal_order_id;
+            const needsRetry =
+              ["CREATING", "RECONCILING"].includes(payment.status) &&
+              !payment.paypal_order_id;
+            const canVerify =
+              ["CAPTURING", "RECONCILING"].includes(payment.status) &&
+              Boolean(payment.paypal_order_id);
             const canClose = ["RECONCILING", "FAILED"].includes(payment.status);
             return (
               <li key={payment.id} className="flex flex-col gap-2 px-5 py-3">
@@ -108,7 +112,7 @@ export function PaymentHistory({ requirementId }: { requirementId: string }) {
                         Retry create
                       </Button>
                     ) : null}
-                    {payment.status === "RECONCILING" && payment.paypal_order_id ? (
+                    {canVerify ? (
                       <Button
                         size="sm"
                         variant="secondary"
@@ -131,6 +135,14 @@ export function PaymentHistory({ requirementId }: { requirementId: string }) {
                     ) : null}
                   </span>
                 </div>
+
+                {["CREATING", "CAPTURING", "AWAITING_APPROVAL"].includes(payment.status) ? (
+                  <p className="text-[11px] leading-relaxed text-ink-faint">
+                    {payment.status === "AWAITING_APPROVAL"
+                      ? "Waiting for the buyer to approve in PayPal."
+                      : "Waiting for a PayPal result. If the process stops, the server parks this attempt for verification."}
+                  </p>
+                ) : null}
 
                 {payment.resolution_note ? (
                   <p className="text-[11px] leading-relaxed text-ink-faint">

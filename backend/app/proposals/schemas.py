@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import datetime
 from uuid import UUID
 
 from pydantic import BaseModel, Field
@@ -15,13 +15,14 @@ class ViolationOut(BaseModel):
 
 
 class ProposalCreate(BaseModel):
+    """A scope to price. Budget, deadline and assets come from the client record;
+    `assets_ready`, when provided, is an explicit seller assumption."""
+
     label: str = Field(min_length=1, max_length=120)
     pages: int = Field(ge=1, le=20)
     addon_codes: list[str] = Field(default_factory=list)
     requested_features: list[str] = Field(default_factory=list)
-    assets_ready: bool = True
-    budget_minor: int | None = Field(default=None, ge=0, le=10_000_000)
-    deadline: date | None = None
+    assets_ready: bool | None = None
 
 
 class ProposalOut(BaseModel):

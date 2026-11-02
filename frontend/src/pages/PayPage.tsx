@@ -22,7 +22,9 @@ export default function PayPage() {
     queryFn: () => api.payment(paymentId),
     enabled: Boolean(paymentId),
     refetchInterval: (query) =>
-      query.state.data?.status === "RECONCILING" ? 5000 : false,
+      ["CREATING", "CAPTURING", "RECONCILING"].includes(query.state.data?.status ?? "")
+        ? 5000
+        : false,
   });
 
   const capture = useMutation({
@@ -126,12 +128,14 @@ export default function PayPage() {
           </div>
         ) : null}
 
-        {data.status === "RECONCILING" ? (
+        {["CREATING", "CAPTURING", "RECONCILING"].includes(data.status) ? (
           <div className="mt-5 flex flex-col gap-3">
             <p className="flex items-start gap-2 text-[12px] leading-relaxed text-flag-warn">
               <AlertTriangle size={14} className="mt-[2px] shrink-0" />
-              PayPal has not confirmed the result yet. Nothing counts as paid until the payment is
-              verified; this page checks again every few seconds.
+              {data.status === "RECONCILING"
+                ? "PayPal has not confirmed the result yet. Nothing counts as paid until the payment is verified."
+                : "The server is waiting for a PayPal result. If the process stops, this attempt is parked for verification."}{" "}
+              This page checks again every few seconds.
             </p>
             <div className="flex flex-wrap items-center gap-3">
               <Button
@@ -193,6 +197,21 @@ export default function PayPage() {
           </div>
         ) : null}
 
+        {data.status === "ABANDONED" ? (
+          <div className="mt-5 flex flex-col gap-3">
+            <p className="flex items-start gap-2 text-[12px] leading-relaxed text-ink-muted">
+              <AlertTriangle size={14} className="mt-[2px] shrink-0" />
+              This attempt was closed after a PayPal check. Nothing was charged for it.
+            </p>
+            <Link
+              to={requirementId ? `/briefs/${requirementId}` : "/briefs"}
+              className="text-[12px] font-medium text-pine underline underline-offset-4"
+            >
+              Start a new attempt from the brief
+            </Link>
+          </div>
+        ) : null}
+
         {error ? (
           <p className="mt-4 text-[12px] leading-relaxed text-flag-bad">
             {error.code === "not_approved"
@@ -228,6 +247,8 @@ function titleFor(status: string, returned: boolean): string {
   switch (status) {
     case "AWAITING_APPROVAL":
       return returned ? "Confirming your payment" : "Approve the payment in PayPal";
+    case "CREATING":
+      return "Preparing the PayPal order";
     case "CAPTURING":
       return "Confirming your payment";
     case "RECONCILING":
@@ -236,6 +257,8 @@ function titleFor(status: string, returned: boolean): string {
       return "Payment confirmed";
     case "FAILED":
       return "This attempt did not go through";
+    case "ABANDONED":
+      return "This attempt was closed";
     default:
       return "Preparing the payment";
   }
@@ -245,6 +268,8 @@ function describe(status: string): string {
   switch (status) {
     case "AWAITING_APPROVAL":
       return "The order exists in the PayPal sandbox. Only the buyer can approve it.";
+    case "CREATING":
+      return "The server is creating the PayPal order. If it does not receive an order id, the attempt is parked for verification.";
     case "CAPTURING":
       return "PayPal is processing the payment. This usually takes a few seconds.";
     case "RECONCILING":
@@ -253,6 +278,8 @@ function describe(status: string): string {
       return "PayPal confirmed the payment for the exact amount on this quote.";
     case "FAILED":
       return "PayPal declined or the order expired. The quote is unlocked again.";
+    case "ABANDONED":
+      return "The studio checked PayPal and closed this attempt; the quote is unlocked again.";
     default:
       return "Creating the PayPal order for this quote.";
   }

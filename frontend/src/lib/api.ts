@@ -197,8 +197,8 @@ export const api = {
   requirementOrder: (id: string) =>
     request<{ order: OrderSnapshot | null }>(`/requirements/${id}/order`),
 
-  // Pending backend endpoints. The request carries scope choices only, never an amount;
-  // the server prices them with the current rule version.
+  // The request carries scope choices only, never an amount; the server prices
+  // them with the current rule version.
   estimateScope: (payload: { pages: number; addon_codes: string[] }) =>
     request<ScopeEstimate>("/service-rules/estimate", { method: "POST", body: payload }),
 

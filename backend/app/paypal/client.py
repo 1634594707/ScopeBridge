@@ -91,8 +91,11 @@ def _access_token() -> str:
             raise PayPalTransportError(type(exc).__name__) from exc
         if response.status_code != 200:
             raise PayPalResponseError(response.status_code, _body(response))
-        payload = response.json()
-        token = payload["access_token"]
+        try:
+            payload = response.json()
+            token = payload["access_token"]
+        except (ValueError, KeyError, TypeError) as exc:
+            raise PayPalError("PayPal token response did not contain an access token") from exc
         expires_in = float(payload.get("expires_in", 300))
         _token_cache[cache_key] = (token, now + max(30.0, expires_in - 60.0))
         return token

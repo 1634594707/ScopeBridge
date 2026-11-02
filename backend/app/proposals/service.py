@@ -13,7 +13,7 @@ from app.core.errors import conflict, not_found
 from app.proposals.models import Proposal
 from app.proposals.schemas import ProposalCreate, ProposalOut, ViolationOut
 from app.requirements.models import Requirement
-from app.requirements.service import latest_client_message
+from app.requirements.service import brief_is_closed, latest_client_message
 from app.rules import evaluate
 from app.rules.types import ScopeInput
 from app.service_rules import service as rules_service
@@ -24,6 +24,8 @@ MAX_PROPOSALS_PER_REVISION = 2
 def create_proposal(
     db: Session, requirement: Requirement, payload: ProposalCreate
 ) -> Proposal:
+    if brief_is_closed(db, requirement):
+        raise conflict("brief_closed", "This brief is closed after payment.")
     existing_count = len(
         db.scalars(
             select(Proposal.id).where(
@@ -43,12 +45,10 @@ def create_proposal(
     rule_set = rules_service.to_rule_set(rule_row)
     latest = latest_client_message(requirement)
 
-    budget = payload.budget_minor if payload.budget_minor is not None else (
-        latest.budget_minor if latest else None
-    )
-    deadline = payload.deadline if payload.deadline is not None else (
-        latest.deadline if latest else None
-    )
+    # Client record is authoritative. A seller may record one explicit
+    # assumption: that assets are ready even though the client said they are not.
+    client_assets = latest.assets_ready if latest and latest.assets_ready is not None else False
+    assets_ready = payload.assets_ready if payload.assets_ready is not None else client_assets
 
     result = evaluate(
         rule_set,
@@ -56,9 +56,9 @@ def create_proposal(
             pages=payload.pages,
             addon_codes=tuple(payload.addon_codes),
             requested_features=tuple(payload.requested_features),
-            assets_ready=payload.assets_ready,
-            deadline=deadline,
-            budget_minor=budget,
+            assets_ready=assets_ready,
+            deadline=latest.deadline if latest else None,
+            budget_minor=latest.budget_minor if latest else None,
             today=date.today(),
         ),
     )
@@ -71,7 +71,7 @@ def create_proposal(
         pages=payload.pages,
         addon_codes=list(payload.addon_codes),
         requested_features=list(payload.requested_features),
-        assets_ready=payload.assets_ready,
+        assets_ready=assets_ready,
         feasible=result.feasible,
         total_minor=result.total_minor,
         currency=result.currency,
@@ -91,6 +91,8 @@ def load_proposal(db: Session, proposal_id: UUID) -> Proposal:
 
 
 def select_proposal(db: Session, requirement: Requirement, proposal_id: UUID) -> Proposal:
+    if brief_is_closed(db, requirement):
+        raise conflict("brief_closed", "This brief is closed after payment.")
     proposal = load_proposal(db, proposal_id)
     if proposal.requirement_id != requirement.id:
         raise not_found("Proposal not found")

@@ -143,6 +143,48 @@ def test_structured_change_updates_the_recorded_budget(seller, rules) -> None:
     assert repriced["total_minor"] == 70000
 
 
+def test_a_seller_note_does_not_erase_client_facts(seller, rules) -> None:
+    seller_client, seller_headers = seller_browser()
+    brief_client, brief_headers = client_browser()
+    requirement_id = create_brief(brief_client, brief_headers)
+
+    seller_note = seller_client.post(
+        f"/api/requirements/{requirement_id}/messages",
+        json={"body": "Here is what fits the budget.", "expected_revision": 1},
+        headers=seller_headers,
+    )
+    assert seller_note.status_code == 201, seller_note.text
+
+    client_change = brief_client.post(
+        f"/api/portal/{requirement_id}/messages",
+        json={"body": "Please use a warmer colour palette.", "expected_revision": 2},
+        headers=brief_headers,
+    )
+    assert client_change.status_code == 201, client_change.text
+
+    view = brief_client.get(f"/api/portal/{requirement_id}").json()
+    assert view["requirement"]["budget_minor"] == 50000
+    assert view["requirement"]["deadline"] is not None
+    assert view["requirement"]["assets_ready"] is True
+
+
+def test_a_proposal_defaults_to_the_client_asset_record(seller, rules) -> None:
+    seller_client, seller_headers = seller_browser()
+    brief_client, brief_headers = client_browser()
+    requirement_id = create_brief(brief_client, brief_headers, assets_ready=False)
+
+    default = _proposal(
+        seller_client, requirement_id, seller_headers, label="Client record", assets_ready=None
+    )
+    assert default["assets_ready"] is False
+
+    assumed = _proposal(
+        seller_client, requirement_id, seller_headers, label="Assets assumed ready",
+        assets_ready=True,
+    )
+    assert assumed["assets_ready"] is True
+
+
 def test_new_revision_supersedes_the_open_draft(seller, rules) -> None:
     seller_client, seller_headers = seller_browser()
     brief_client, brief_headers = client_browser()

@@ -138,6 +138,10 @@ export default function PortalPage() {
   }
 
   const requirement = data.requirement;
+  const closed =
+    requirement.status === "CLOSED" ||
+    Boolean(data.order) ||
+    quotes.some((quote) => quote.status === "PAID");
   const selectError = select.error instanceof ApiError ? select.error : null;
   const confirmError = confirm.error instanceof ApiError ? confirm.error : null;
 
@@ -202,9 +206,10 @@ export default function PortalPage() {
                     proposal={proposal}
                     rules={rules.data}
                     budgetMinor={requirement.budget_minor}
+                    clientAssetsReady={requirement.assets_ready}
                     stale={proposal.source_revision !== currentRevision}
                     busy={select.isPending}
-                    onSelect={(value) => select.mutate(value.id)}
+                    onSelect={closed ? undefined : (value) => select.mutate(value.id)}
                   />
                 ))}
               </div>
@@ -312,6 +317,12 @@ export default function PortalPage() {
               title="Something missing?"
               description={`Adding a note creates revision ${currentRevision + 1} and pauses any open draft.`}
             />
+            {closed ? (
+              <p className="mt-4 text-[13px] leading-relaxed text-ink-muted">
+                This brief is closed after payment. Start a new brief if you need more work; this
+                version and its snapshot stay read-only.
+              </p>
+            ) : (
             <form onSubmit={submitChange} className="mt-4 flex flex-col gap-3">
               <Field label="What changed?" htmlFor="portal-change" error={formError}>
                 <TextArea
@@ -405,6 +416,7 @@ export default function PortalPage() {
                 Send to studio
               </Button>
             </form>
+            )}
           </Card>
 
           {rules.data ? (

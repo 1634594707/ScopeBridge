@@ -69,7 +69,7 @@ const questions = [
   },
   {
     q: "Can the studio change the price after I confirm?",
-    a: "No. Quote lines freeze when the studio reviews them, and a confirmed quote cannot be edited or superseded by later messages. Only draft and reviewed quotes are replaced when the brief changes.",
+    a: "No. Quote lines freeze when the studio reviews them. If the brief changes after confirmation, that confirmed version is superseded and needs a fresh confirmation; it is never edited in place.",
   },
   {
     q: "Do both sides need accounts?",

@@ -14,7 +14,7 @@ from app.quotes.models import QuoteItem, QuoteVersion
 from app.quotes.schemas import QuoteCreate, QuoteItemOut, QuoteOut
 from app.quotes.states import QuoteAction, QuoteStatus, transition
 from app.requirements.models import Requirement
-from app.requirements.service import latest_client_message
+from app.requirements.service import brief_is_closed, latest_client_message
 from app.rules import evaluate
 from app.rules.types import ScopeInput
 from app.service_rules import service as rules_service
@@ -29,6 +29,8 @@ def create_quote(
     payload: QuoteCreate,
     seller_id: UUID,
 ) -> QuoteVersion:
+    if brief_is_closed(db, requirement):
+        raise conflict("brief_closed", "This brief is closed after payment.")
     proposal = load_proposal(db, payload.proposal_id)
     if proposal.requirement_id != requirement.id:
         raise not_found("Proposal not found")
@@ -157,7 +159,9 @@ def supersede_open(db: Session, requirement_id: UUID) -> None:
     rows = db.scalars(
         select(QuoteVersion).where(
             QuoteVersion.requirement_id == requirement_id,
-            QuoteVersion.status.in_([QuoteStatus.DRAFT, QuoteStatus.REVIEWED]),
+            QuoteVersion.status.in_(
+                [QuoteStatus.DRAFT, QuoteStatus.REVIEWED, QuoteStatus.CONFIRMED]
+            ),
         )
     ).all()
     if not rows:

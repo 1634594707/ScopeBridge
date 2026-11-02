@@ -18,6 +18,7 @@ from app.api.deps import (
 )
 from app.core.config import get_settings
 from app.core.db import get_db
+from app.core.errors import ApiError
 from app.payments import service as payments_service
 from app.proposals import service as proposals_service
 from app.quotes import service as quotes_service
@@ -41,7 +42,11 @@ settings = get_settings()
 def _seller_id(db: Session) -> UUID:
     seller = db.scalar(select(User).where(User.email == settings.seller_email.lower()))
     if seller is None:
-        raise RuntimeError("Seller account is missing; run `uv run python -m app.seed`")
+        raise ApiError(
+            503,
+            "seller_missing",
+            "The studio account is not seeded. Run the documented seed step.",
+        )
     return seller.id
 
 
@@ -65,7 +70,7 @@ def list_requirements(
     db: Session = Depends(get_db),
 ) -> list[SellerRequirementSummary]:
     rows = service.list_for_seller(db, auth.user.id, limit=limit)
-    locked = service.receipt_requirement_ids(db, [row.id for row in rows])
+    locked = service.undeletable_requirement_ids(db, [row.id for row in rows])
     return [
         service.summarize_for_seller(row, deletable=row.id not in locked)
         for row in rows

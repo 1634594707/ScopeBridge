@@ -12,11 +12,11 @@ queried the original order.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -26,17 +26,58 @@ from app.payments.models import ACTIVE_STATUSES, OrderSnapshot, PaymentAttempt
 from app.payments.schemas import AttentionPaymentOut, PaymentOut, SnapshotItemOut, SnapshotOut
 from app.paypal import client as paypal
 from app.quotes.models import QuoteVersion
-from app.quotes.states import QuoteAction, QuoteStatus, transition
+from app.quotes.states import QuoteStatus
 from app.requirements.models import Requirement
-from app.requirements.service import CLOSED_STATUS
+from app.requirements.service import CLOSED_STATUS, brief_is_closed
 
 MAX_CREATE_RETRIES = 2
-ATTENTION_STATUSES = ("RECONCILING", "FAILED")
+STALE_ATTEMPT_SECONDS = 120
+
+
+def _now() -> datetime:
+    return datetime.now(UTC)
+
+
+def recover_stale_attempts(db: Session, *, older_than_seconds: int = STALE_ATTEMPT_SECONDS) -> int:
+    """Park in-flight attempts whose process never wrote a result.
+
+    A crash between the local commit and the PayPal response leaves CREATING or
+    CAPTURING behind. The external outcome is unknown, so the attempt must move
+    to RECONCILING; it is never guessed as failed or paid.
+    """
+    cutoff = _now() - timedelta(seconds=older_than_seconds)
+    result = db.execute(
+        update(PaymentAttempt)
+        .where(
+            PaymentAttempt.status.in_(("CREATING", "CAPTURING")),
+            PaymentAttempt.updated_at < cutoff,
+        )
+        .values(
+            status="RECONCILING",
+            error_code="stale_timeout",
+            error_detail="No PayPal result was recorded before the stale window closed.",
+            updated_at=_now(),
+        )
+    )
+    db.commit()
+    return result.rowcount or 0
+
+
+def _require_paypal_configured() -> None:
+    settings = get_settings()
+    if not settings.paypal_client_id or not settings.paypal_client_secret:
+        raise ApiError(
+            503,
+            "paypal_not_configured",
+            "PayPal sandbox credentials are not configured. Set PAYPAL_CLIENT_ID and "
+            "PAYPAL_CLIENT_SECRET in .env.",
+        )
 
 
 def start_payment(
     db: Session, requirement: Requirement, quote_id: UUID, idempotency_key: str
 ) -> PaymentAttempt:
+    recover_stale_attempts(db)
     quote = db.get(QuoteVersion, quote_id)
     if quote is None or quote.requirement_id != requirement.id:
         raise not_found("Quote not found")
@@ -61,6 +102,8 @@ def start_payment(
     if active is not None:
         return active
 
+    if brief_is_closed(db, requirement):
+        raise conflict("brief_closed", "This brief is closed after payment.")
     if quote.status == QuoteStatus.PAID:
         raise conflict("already_paid", "This quote has already been paid.")
     if quote.status != QuoteStatus.CONFIRMED:
@@ -69,6 +112,19 @@ def start_payment(
             "Only a confirmed quote can be paid.",
             {"status": quote.status},
         )
+    if quote.source_revision != requirement.revision:
+        raise conflict(
+            "revision_changed",
+            "The brief changed after this quote was confirmed. Ask for a fresh quote.",
+            {
+                "quote_revision": quote.source_revision,
+                "current_revision": requirement.revision,
+            },
+        )
+    if quote.expires_at is not None and quote.expires_at <= _now():
+        raise conflict("quote_expired", "This quote has expired. Ask for a fresh one.")
+
+    _require_paypal_configured()
 
     attempt = PaymentAttempt(
         quote_version_id=quote.id,
@@ -78,10 +134,49 @@ def start_payment(
         amount_minor=quote.total_minor,
         currency=quote.currency,
     )
-    quote.status = transition(quote.status, QuoteAction.LOCK_FOR_PAYMENT)
+    locked = db.execute(
+        update(QuoteVersion)
+        .where(QuoteVersion.id == quote.id, QuoteVersion.status == QuoteStatus.CONFIRMED)
+        .values(status=QuoteStatus.PAYMENT_LOCKED, updated_at=_now())
+    )
+    if (locked.rowcount or 0) != 1:
+        db.rollback()
+        fresh = db.get(QuoteVersion, quote.id)
+        if fresh is not None and fresh.status == QuoteStatus.PAID:
+            raise conflict("already_paid", "This quote has already been paid.")
+        active = db.scalar(
+            select(PaymentAttempt).where(
+                PaymentAttempt.quote_version_id == quote.id,
+                PaymentAttempt.status.in_(ACTIVE_STATUSES),
+            )
+        )
+        if active is not None:
+            return active
+        raise conflict(
+            "quote_not_payable",
+            "Only a confirmed quote can be paid.",
+            {"status": fresh.status if fresh is not None else "UNKNOWN"},
+        )
+
     db.add(attempt)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        active = db.scalar(
+            select(PaymentAttempt).where(
+                PaymentAttempt.quote_version_id == quote.id,
+                PaymentAttempt.status.in_(ACTIVE_STATUSES),
+            )
+        )
+        if active is not None:
+            return active
+        raise conflict(
+            "payment_conflict",
+            "Another payment attempt was created for this quote.",
+        ) from None
     db.refresh(attempt)
+    db.refresh(quote)
 
     return _create_with_paypal(db, attempt, quote)
 
@@ -94,6 +189,7 @@ def retry_create(db: Session, payment_id: UUID, seller_id: UUID) -> PaymentAttem
     creates the one that never happened. Bounded: after `MAX_CREATE_RETRIES`
     the seller has to check PayPal and close the attempt explicitly.
     """
+    recover_stale_attempts(db)
     attempt = _load_for_seller(db, payment_id, seller_id)
     if attempt.paypal_order_id:
         raise conflict(
@@ -112,13 +208,49 @@ def retry_create(db: Session, payment_id: UUID, seller_id: UUID) -> PaymentAttem
             f"This attempt was already retried {MAX_CREATE_RETRIES} times. "
             "Check PayPal, then close it with a note.",
         )
+    _require_paypal_configured()
     quote = db.get(QuoteVersion, attempt.quote_version_id)
     if quote is None:
         raise not_found("Quote not found")
 
-    attempt.retry_count += 1
-    attempt.status = "CREATING"
-    attempt.error_code = None
+    updated = db.execute(
+        update(PaymentAttempt)
+        .where(
+            PaymentAttempt.id == attempt.id,
+            PaymentAttempt.status.in_(("RECONCILING", "CREATING")),
+            PaymentAttempt.paypal_order_id.is_(None),
+            PaymentAttempt.retry_count < MAX_CREATE_RETRIES,
+        )
+        .values(
+            retry_count=PaymentAttempt.retry_count + 1,
+            status="CREATING",
+            error_code=None,
+            error_detail=None,
+            updated_at=_now(),
+        )
+    )
+    if (updated.rowcount or 0) != 1:
+        db.rollback()
+        fresh = db.get(PaymentAttempt, attempt.id)
+        if fresh is None:
+            raise not_found("Payment not found")
+        if fresh.paypal_order_id:
+            raise conflict(
+                "order_already_exists",
+                "PayPal already returned an order id for this attempt; "
+                "reconcile instead of retrying.",
+            )
+        if fresh.retry_count >= MAX_CREATE_RETRIES:
+            raise conflict(
+                "retry_limit",
+                f"This attempt was already retried {MAX_CREATE_RETRIES} times. "
+                "Check PayPal, then close it with a note.",
+            )
+        raise conflict(
+            "not_recoverable",
+            "Only an attempt with an unknown create result can be retried.",
+            {"status": fresh.status},
+        )
     db.commit()
     db.refresh(attempt)
     return _create_with_paypal(db, attempt, quote)
@@ -136,6 +268,7 @@ def close_attempt(
     This is the only path that unlocks a quote without a PayPal-verified
     outcome, so it demands an explicit acknowledgement and a written note.
     """
+    recover_stale_attempts(db)
     attempt = _load_for_seller(db, payment_id, seller_id)
     if attempt.status not in {"RECONCILING", "FAILED"}:
         raise conflict(
@@ -164,11 +297,38 @@ def close_attempt(
     if quote is not None and quote.status == QuoteStatus.PAID:
         raise conflict("already_paid", "This quote is already paid.")
 
-    attempt.status = "ABANDONED"
-    attempt.resolved_by = seller_id
-    attempt.resolved_at = datetime.now(UTC)
-    attempt.resolution_note = cleaned[:500]
-    attempt.error_code = attempt.error_code or "closed_without_order"
+    resolved_at = _now()
+    updated = db.execute(
+        update(PaymentAttempt)
+        .where(
+            PaymentAttempt.id == attempt.id,
+            PaymentAttempt.status.in_(("RECONCILING", "FAILED")),
+            PaymentAttempt.paypal_capture_id.is_(None),
+        )
+        .values(
+            status="ABANDONED",
+            resolved_by=seller_id,
+            resolved_at=resolved_at,
+            resolution_note=cleaned[:500],
+            error_code=attempt.error_code or "closed_without_order",
+            updated_at=resolved_at,
+        )
+    )
+    if (updated.rowcount or 0) != 1:
+        db.rollback()
+        fresh = db.get(PaymentAttempt, attempt.id)
+        if fresh is None:
+            raise not_found("Payment not found")
+        if fresh.status == "COMPLETED" or fresh.paypal_capture_id:
+            raise conflict(
+                "capture_exists",
+                "A capture is recorded for this attempt; it cannot be closed as unpaid.",
+            )
+        raise conflict(
+            "not_closable",
+            "Only an unresolved or failed attempt can be closed.",
+            {"status": fresh.status},
+        )
     db.commit()
     db.refresh(attempt)
     if quote is not None:
@@ -191,9 +351,18 @@ def _create_with_paypal(
             cancel_url=f"{base}/pay/{attempt.id}?paypal=cancel",
             request_id=_request_id(attempt, "create"),
         )
-    except paypal.PayPalTransportError as exc:
-        return _mark(db, attempt, "RECONCILING", "create_unknown", str(exc)[:300])
+    except paypal.PayPalTransportError:
+        return _mark(db, attempt, "RECONCILING", "create_unknown", "No usable create response.")
     except paypal.PayPalResponseError as exc:
+        if exc.status_code >= 500:
+            _mark(db, attempt, "RECONCILING", f"create_{exc.status_code}", exc.issue[:300])
+            raise ApiError(
+                502,
+                "paypal_unavailable",
+                "PayPal did not return a usable answer. The attempt will be verified before it "
+                "is judged.",
+                {"status": exc.status_code},
+            ) from exc
         _mark(db, attempt, "FAILED", f"create_{exc.status_code}", exc.issue[:300])
         _unlock(db, quote)
         raise ApiError(
@@ -201,6 +370,14 @@ def _create_with_paypal(
             "paypal_rejected_order",
             "PayPal did not accept the order. Nothing was charged.",
             {"status": exc.status_code, "issue": exc.issue},
+        ) from exc
+    except paypal.PayPalError as exc:
+        _mark(db, attempt, "FAILED", "paypal_unavailable", None)
+        _unlock(db, quote)
+        raise ApiError(
+            503,
+            "paypal_unavailable",
+            "PayPal could not be reached or configured. Nothing was charged.",
         ) from exc
 
     attempt.paypal_order_id = order.id
@@ -220,6 +397,7 @@ def _create_with_paypal(
 def capture_payment(
     db: Session, requirement: Requirement, payment_id: UUID
 ) -> PaymentAttempt:
+    recover_stale_attempts(db)
     attempt = _load(db, requirement, payment_id)
     if attempt.status == "COMPLETED":
         return attempt
@@ -230,17 +408,45 @@ def capture_payment(
     if not attempt.paypal_order_id:
         raise conflict("payment_not_capturable", "PayPal never returned an order id.")
 
-    attempt.status = "CAPTURING"
+    updated = db.execute(
+        update(PaymentAttempt)
+        .where(
+            PaymentAttempt.id == attempt.id,
+            PaymentAttempt.status.in_(("AWAITING_APPROVAL", "RECONCILING", "CAPTURING")),
+        )
+        .values(status="CAPTURING", updated_at=_now())
+    )
+    if (updated.rowcount or 0) != 1:
+        db.rollback()
+        fresh = db.get(PaymentAttempt, attempt.id)
+        if fresh is not None and fresh.status == "COMPLETED":
+            return fresh
+        raise conflict(
+            "payment_not_capturable",
+            "This payment cannot be captured.",
+            {"status": fresh.status if fresh is not None else "UNKNOWN"},
+        )
     db.commit()
+    db.refresh(attempt)
 
     try:
         payload = paypal.capture_order(
             attempt.paypal_order_id, request_id=_request_id(attempt, "capture")
         )
-    except paypal.PayPalTransportError as exc:
-        return _mark(db, attempt, "RECONCILING", "capture_unknown", str(exc)[:300])
+    except paypal.PayPalTransportError:
+        return _mark(db, attempt, "RECONCILING", "capture_unknown", "No usable capture response.")
     except paypal.PayPalResponseError as exc:
         return _handle_capture_error(db, attempt, exc)
+    except paypal.PayPalError as exc:
+        _mark(db, attempt, "FAILED", "paypal_unavailable", None)
+        quote = db.get(QuoteVersion, attempt.quote_version_id)
+        if quote is not None:
+            _unlock(db, quote)
+        raise ApiError(
+            503,
+            "paypal_unavailable",
+            "PayPal could not be reached or configured. Nothing was charged.",
+        ) from exc
 
     return _finalize(db, attempt, payload)
 
@@ -265,14 +471,21 @@ def reconcile(db: Session, attempt: PaymentAttempt) -> PaymentAttempt:
 
     try:
         order = paypal.get_order(attempt.paypal_order_id)
-    except paypal.PayPalTransportError as exc:
-        return _mark(db, attempt, "RECONCILING", "reconcile_unknown", str(exc)[:300])
+    except paypal.PayPalTransportError:
+        return _mark(db, attempt, "RECONCILING", "reconcile_unknown", "No usable query response.")
     except paypal.PayPalResponseError as exc:
         if exc.status_code == 404:
             return _fail_and_unlock(
                 db, attempt, quote, "order_missing", "PayPal has no such order."
             )
         return _mark(db, attempt, "RECONCILING", f"reconcile_{exc.status_code}", exc.issue[:300])
+    except paypal.PayPalError as exc:
+        _mark(db, attempt, "RECONCILING", "reconcile_unavailable", None)
+        raise ApiError(
+            503,
+            "paypal_unavailable",
+            "PayPal could not be reached or configured. The attempt stays in verification.",
+        ) from exc
 
     status = order.get("status", "")
     if status == "COMPLETED":
@@ -295,19 +508,26 @@ def reconcile(db: Session, attempt: PaymentAttempt) -> PaymentAttempt:
 
 
 def list_attention(db: Session, seller_id: UUID) -> list[AttentionPaymentOut]:
-    """Attempts the seller still has to resolve, newest activity first.
+    """Every attempt the seller may need to resolve, newest activity first.
 
-    A failed attempt whose quote was paid later is history, not work: the
-    quote can no longer be unlocked, so the attempt is not listed here.
+    CREATING, AWAITING_APPROVAL, CAPTURING and RECONCILING are all non-terminal;
+    an attempt on an already-paid quote is still shown because it may represent
+    a conflicting second capture.
     """
+    recover_stale_attempts(db)
     rows = db.execute(
         select(PaymentAttempt, Requirement, QuoteVersion)
         .join(Requirement, Requirement.id == PaymentAttempt.requirement_id)
         .join(QuoteVersion, QuoteVersion.id == PaymentAttempt.quote_version_id)
         .where(
             Requirement.seller_id == seller_id,
-            PaymentAttempt.status.in_(ATTENTION_STATUSES),
-            QuoteVersion.status != QuoteStatus.PAID,
+            or_(
+                PaymentAttempt.status.in_(ACTIVE_STATUSES),
+                and_(
+                    PaymentAttempt.status == "FAILED",
+                    QuoteVersion.status != QuoteStatus.PAID,
+                ),
+            ),
         )
         .order_by(PaymentAttempt.updated_at.desc())
     ).all()
@@ -318,6 +538,7 @@ def list_attention(db: Session, seller_id: UUID) -> list[AttentionPaymentOut]:
 
 
 def list_for_requirement(db: Session, requirement_id: UUID) -> list[PaymentOut]:
+    recover_stale_attempts(db)
     rows = db.scalars(
         select(PaymentAttempt)
         .where(PaymentAttempt.requirement_id == requirement_id)
@@ -389,6 +610,7 @@ def serialize_snapshot(snapshot: OrderSnapshot) -> SnapshotOut:
 
 
 def _load_for_seller(db: Session, payment_id: UUID, seller_id: UUID) -> PaymentAttempt:
+    recover_stale_attempts(db)
     attempt = db.get(PaymentAttempt, payment_id)
     if attempt is None:
         raise not_found("Payment not found")
@@ -399,6 +621,7 @@ def _load_for_seller(db: Session, payment_id: UUID, seller_id: UUID) -> PaymentA
 
 
 def load_for_client(db: Session, payment_id: UUID, client_id: UUID) -> PaymentAttempt:
+    recover_stale_attempts(db)
     attempt = db.get(PaymentAttempt, payment_id)
     if attempt is None:
         raise not_found("Payment not found")
@@ -421,7 +644,36 @@ def _handle_capture_error(
     quote = db.get(QuoteVersion, attempt.quote_version_id)
     issue = exc.issue
     if issue == "ORDER_ALREADY_CAPTURED":
-        return _mark(db, attempt, "RECONCILING", "already_captured", "Verifying with PayPal.")
+        # This attempt may be the second of two concurrent captures. The only
+        # safe move is to read the original order and let the verified capture
+        # decide the local state; never downgrade a COMPLETED attempt blind.
+        if not attempt.paypal_order_id:
+            return _mark(
+                db,
+                attempt,
+                "RECONCILING",
+                "already_captured_no_order",
+                "PayPal reports a capture but no order id is recorded.",
+            )
+        try:
+            order = paypal.get_order(attempt.paypal_order_id)
+        except paypal.PayPalError:
+            return _mark(
+                db,
+                attempt,
+                "RECONCILING",
+                "already_captured_verify",
+                "PayPal reported an existing capture; the order still needs a query.",
+            )
+        if order.get("status") == "COMPLETED":
+            return _finalize(db, attempt, order)
+        return _mark(
+            db,
+            attempt,
+            "RECONCILING",
+            "already_captured_verify",
+            "PayPal reported an existing capture but the order is not COMPLETED.",
+        )
     if issue == "ORDER_NOT_APPROVED":
         return _mark(
             db,
@@ -447,6 +699,17 @@ def _finalize(db: Session, attempt: PaymentAttempt, payload: dict[str, Any]) -> 
     capture = paypal.capture_of(payload)
     if capture is None:
         return _mark(db, attempt, "RECONCILING", "capture_missing", "No capture object returned.")
+    capture_id = str(capture.get("id") or "")
+    if not capture_id:
+        return _mark(db, attempt, "RECONCILING", "capture_missing_id", "No capture id returned.")
+    if not attempt.paypal_order_id:
+        return _mark(
+            db,
+            attempt,
+            "RECONCILING",
+            "capture_missing_order",
+            "A capture was reported without a recorded order id.",
+        )
 
     if capture.get("status") != "COMPLETED":
         return _mark(
@@ -470,12 +733,26 @@ def _finalize(db: Session, attempt: PaymentAttempt, payload: dict[str, Any]) -> 
     if merchant and payee.get("merchant_id") not in (None, "", merchant):
         return _mark(db, attempt, "RECONCILING", "capture_merchant_mismatch", "Unexpected payee.")
 
-    captured_at = datetime.now(UTC)
+    existing = db.scalar(
+        select(OrderSnapshot).where(OrderSnapshot.quote_version_id == quote.id)
+    )
+    if existing is not None:
+        if existing.paypal_capture_id != capture_id:
+            return _mark(
+                db,
+                attempt,
+                "RECONCILING",
+                "capture_conflict",
+                "A different capture is already recorded for this quote.",
+            )
+        return _repair_paid(db, attempt, quote)
+
+    captured_at = _now()
     snapshot = OrderSnapshot(
         requirement_id=attempt.requirement_id,
         quote_version_id=quote.id,
-        paypal_order_id=attempt.paypal_order_id or capture.get("id", ""),
-        paypal_capture_id=capture.get("id", ""),
+        paypal_order_id=attempt.paypal_order_id,
+        paypal_capture_id=capture_id,
         amount_minor=attempt.amount_minor,
         currency=attempt.currency,
         payer_email=(payload.get("payer") or {}).get("email_address", ""),
@@ -491,21 +768,103 @@ def _finalize(db: Session, attempt: PaymentAttempt, payload: dict[str, Any]) -> 
         ],
         captured_at=captured_at,
     )
-    attempt.status = "COMPLETED"
-    attempt.paypal_capture_id = capture.get("id", "")
-    attempt.error_code = None
-    attempt.error_detail = None
-    if quote.status != QuoteStatus.PAID:
-        quote.status = transition(quote.status, QuoteAction.MARK_PAID)
-    requirement = db.get(Requirement, attempt.requirement_id)
-    if requirement is not None and requirement.status != CLOSED_STATUS:
-        requirement.status = CLOSED_STATUS
-    db.add(snapshot)
     try:
+        db.add(snapshot)
+        # Finalization only writes COMPLETED, so it may repair a stale
+        # RECONCILING/FAILED/ABANDONED attempt. It never downgrades a completed one.
+        marked = db.execute(
+            update(PaymentAttempt)
+            .where(
+                PaymentAttempt.id == attempt.id,
+                or_(
+                    PaymentAttempt.paypal_capture_id.is_(None),
+                    PaymentAttempt.paypal_capture_id == capture_id,
+                ),
+            )
+            .values(
+                status="COMPLETED",
+                paypal_capture_id=capture_id,
+                error_code=None,
+                error_detail=None,
+                updated_at=captured_at,
+            )
+        )
+        if (marked.rowcount or 0) != 1:
+            db.rollback()
+            fresh = db.get(PaymentAttempt, attempt.id)
+            if fresh is not None and fresh.status == "COMPLETED":
+                return fresh
+            return _mark(
+                db,
+                fresh or attempt,
+                "RECONCILING",
+                "capture_conflict",
+                "A different capture is already recorded for this attempt.",
+            )
+        # A verified capture is the repair path for a quote that was unlocked
+        # after an earlier failure. The state machine is not allowed to reject
+        # money that PayPal has already taken.
+        db.execute(
+            update(QuoteVersion)
+            .where(QuoteVersion.id == quote.id, QuoteVersion.status != QuoteStatus.PAID)
+            .values(status=QuoteStatus.PAID, updated_at=captured_at)
+        )
+        db.execute(
+            update(Requirement)
+            .where(
+                Requirement.id == attempt.requirement_id,
+                Requirement.status != CLOSED_STATUS,
+            )
+            .values(status=CLOSED_STATUS, updated_at=captured_at)
+        )
         db.commit()
     except IntegrityError:
         db.rollback()
-        return db.get(PaymentAttempt, attempt.id) or attempt
+        existing = db.scalar(
+            select(OrderSnapshot).where(OrderSnapshot.quote_version_id == quote.id)
+        )
+        fresh = db.get(PaymentAttempt, attempt.id)
+        if existing is not None and existing.paypal_capture_id == capture_id:
+            return _repair_paid(db, fresh or attempt, quote)
+        if fresh is not None and fresh.status == "COMPLETED":
+            return fresh
+        return _mark(
+            db,
+            fresh or attempt,
+            "RECONCILING",
+            "capture_conflict",
+            "A different capture is already recorded for this quote.",
+        )
+    db.refresh(attempt)
+    return attempt
+
+
+def _repair_paid(
+    db: Session, attempt: PaymentAttempt, quote: QuoteVersion
+) -> PaymentAttempt:
+    """Bring an already-snapshotted quote back to PAID without inserting twice."""
+    now = _now()
+    db.execute(
+        update(PaymentAttempt)
+        .where(PaymentAttempt.id == attempt.id)
+        .values(
+            status="COMPLETED",
+            error_code=None,
+            error_detail=None,
+            updated_at=now,
+        )
+    )
+    db.execute(
+        update(QuoteVersion)
+        .where(QuoteVersion.id == quote.id, QuoteVersion.status != QuoteStatus.PAID)
+        .values(status=QuoteStatus.PAID, updated_at=now)
+    )
+    db.execute(
+        update(Requirement)
+        .where(Requirement.id == attempt.requirement_id, Requirement.status != CLOSED_STATUS)
+        .values(status=CLOSED_STATUS, updated_at=now)
+    )
+    db.commit()
     db.refresh(attempt)
     return attempt
 
@@ -519,9 +878,13 @@ def _fail_and_unlock(
 
 
 def _unlock(db: Session, quote: QuoteVersion) -> None:
-    if quote.status == QuoteStatus.PAYMENT_LOCKED:
-        quote.status = transition(quote.status, QuoteAction.UNLOCK_AFTER_FAILURE)
-        db.commit()
+    db.execute(
+        update(QuoteVersion)
+        .where(QuoteVersion.id == quote.id, QuoteVersion.status == QuoteStatus.PAYMENT_LOCKED)
+        .values(status=QuoteStatus.CONFIRMED, updated_at=_now())
+    )
+    db.commit()
+    db.refresh(quote)
 
 
 def _mark(
@@ -531,9 +894,17 @@ def _mark(
     code: str | None,
     detail: str | None,
 ) -> PaymentAttempt:
-    attempt.status = status
-    attempt.error_code = code
-    attempt.error_detail = detail
+    # A late error branch must never overwrite a verified COMPLETED attempt.
+    db.execute(
+        update(PaymentAttempt)
+        .where(PaymentAttempt.id == attempt.id, PaymentAttempt.status != "COMPLETED")
+        .values(
+            status=status,
+            error_code=code,
+            error_detail=detail,
+            updated_at=_now(),
+        )
+    )
     db.commit()
     db.refresh(attempt)
     return attempt

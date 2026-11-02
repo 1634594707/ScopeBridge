@@ -87,6 +87,28 @@ export default function QuotePage() {
           </Button>
         </Link>
       </>
+    ) : data.status === "PAYMENT_LOCKED" ? (
+      <>
+        <p className="flex items-center gap-2 text-[12px] text-pine-deep">
+          <Lock size={14} /> Payment in progress · this version cannot change until PayPal answers
+        </p>
+        <Link to={`/requirements/${data.requirement_id}`}>
+          <Button variant="secondary" size="sm">
+            Back to brief
+          </Button>
+        </Link>
+      </>
+    ) : data.status === "PAID" ? (
+      <>
+        <p className="flex items-center gap-2 text-[12px] text-flag-good">
+          <CheckCheck size={14} /> Paid · the order snapshot is the record
+        </p>
+        <Link to={`/requirements/${data.requirement_id}`}>
+          <Button variant="secondary" size="sm">
+            Back to brief
+          </Button>
+        </Link>
+      </>
     ) : (
       <>
         <p className="text-[12px] text-ink-muted">

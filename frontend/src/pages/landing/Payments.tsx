@@ -11,7 +11,7 @@ const flow = [
   {
     icon: ShieldCheck,
     title: "Captured by the server",
-    body: "Returning from PayPal does not mark anything paid. The server captures the order and checks amount, currency and payee against the locked quote.",
+    body: "Returning from PayPal does not mark anything paid. The server captures the order and checks amount and currency against the locked quote; the payee is checked when a merchant id is configured.",
   },
   {
     icon: CircleHelp,

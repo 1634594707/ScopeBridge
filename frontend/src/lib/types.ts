@@ -226,7 +226,7 @@ export interface IntakeResponse {
   brief_path: string;
 }
 
-/** Response of `POST /api/service-rules/estimate` (endpoint pending on the backend). */
+/** Response of `POST /api/service-rules/estimate`. */
 export interface ScopeEstimate {
   rule_version: number;
   currency: string;
@@ -235,7 +235,7 @@ export interface ScopeEstimate {
   violations: Violation[];
 }
 
-/** Row of `GET /api/payments/attention` (endpoint pending on the backend). */
+/** Row of `GET /api/payments/attention`. */
 export interface AttentionPayment extends Payment {
   client_name: string;
   client_business: string;

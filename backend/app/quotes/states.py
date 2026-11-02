@@ -41,6 +41,7 @@ TRANSITIONS: dict[tuple[QuoteStatus, QuoteAction], QuoteStatus] = {
     (QuoteStatus.PAYMENT_LOCKED, QuoteAction.UNLOCK_AFTER_FAILURE): QuoteStatus.CONFIRMED,
     (QuoteStatus.DRAFT, QuoteAction.SUPERSEDE): QuoteStatus.SUPERSEDED,
     (QuoteStatus.REVIEWED, QuoteAction.SUPERSEDE): QuoteStatus.SUPERSEDED,
+    (QuoteStatus.CONFIRMED, QuoteAction.SUPERSEDE): QuoteStatus.SUPERSEDED,
 }
 
 
