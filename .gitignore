@@ -46,9 +46,13 @@ REQUIREMENTS.md
 
 # Browser profile directories created during diagram review
 docs/.chrome-review*/
+docs/*.visual-check.*
 
 # IDE / agent workspace data
 .codebuddy/
+.claude/
+.superhigh/
+.zcode/
 
 # Local demo recordings and recording scripts
 /recordings/
