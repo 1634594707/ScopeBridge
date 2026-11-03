@@ -14,6 +14,7 @@ attributable to a signed-in account.
 
 > **Status:** working prototype, PayPal **sandbox** only, no hosted demo — every step below runs
 > from this repository. Known gaps are listed under [Known limitations](#known-limitations).
+> **Walkthrough:** [ScopeBridge on YouTube](https://youtu.be/NcASwk_vpr8).
 
 ![Landing page](docs/screenshots/01-landing.png)
 
