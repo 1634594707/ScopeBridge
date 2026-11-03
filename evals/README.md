@@ -54,5 +54,5 @@ Output goes to `evals/reports/<timestamp>[-<tag>].json` and a matching `.md`, wi
 verdicts, average/P95 latency and token usage.
 
 When a rule changes, update the case expectations first, then the implementation; never loosen an
-assertion to make the script pass. Evaluation methodology and conclusions:
-`../.agents/notes/implemented/testing/2026-10-30-comparative-evaluation.md`.
+assertion to make the script pass. Conclusions from the first two-arm run are in
+`reports/20261030T151055Z-facts-v7-inline-both.md`.

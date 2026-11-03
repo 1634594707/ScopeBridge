@@ -1,58 +1,84 @@
-# Credentials: never tracked
+# ScopeBridge — tracked/ignored boundary.
+# Rule of thumb: anything needed to build, run or verify the project stays tracked;
+# anything that is generated, secret or machine-specific stays out.
+
+# --- Secrets and credentials ------------------------------------------------
 .env
 .env.*
 !.env.example
 *.pem
 *.key
+*.p12
+*.jks
 
-# Runtime data
-data/
-*.db
-*.db-journal
-
-# Python
+# --- Python -----------------------------------------------------------------
 __pycache__/
 *.py[cod]
+*.egg-info/
 .venv/
 venv/
 .pytest_cache/
 .mypy_cache/
-ruff_cache/
 .ruff_cache/
+.hypothesis/
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
 
-# Node / frontend build output
+# --- Node, Vite and frontend build output -----------------------------------
 node_modules/
 dist/
 .vite/
-.vite-cache/
 *.tsbuildinfo
-coverage/
+.eslintcache
+pnpm-debug.log*
 
-# Editors
+# --- Test and coverage reports ----------------------------------------------
+# The Playwright specs (frontend/e2e/) and playwright.config.ts stay tracked;
+# only their generated reports are ignored.
+coverage/
+test-results/
+playwright-report/
+blob-report/
+e2e-report/
+
+# --- Local data and runtime state -------------------------------------------
+data/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+*.log
+*.pid
+
+# --- Editors and operating systems ------------------------------------------
 .idea/
 .vscode/
+*.swp
+*.swo
+*~
 .DS_Store
 Thumbs.db
+desktop.ini
 
-# Local-only reference (not part of the submission)
-REQUIREMENTS.md
-
-# Demo artifacts
-*.log
-!samples/*.txt
-!evals/**/*.json
-
-# Browser profile directories created during diagram review
-docs/.chrome-review*/
-docs/*.visual-check.*
-
-# IDE / agent workspace data
+# --- Agent and IDE workspaces (local tooling, not part of the build) ---------
 .codebuddy/
 .claude/
 .superhigh/
 .zcode/
 
-# Local demo recordings and recording scripts
+# Agent skills and decision notes are local tooling; the repository ships code, not the log.
+.agents/notes/
+.agents/skills/
+
+# Local archive for drafts taken out of the published tree.
+/.local-archive/
+
+# --- Diagram review artifacts -----------------------------------------------
+docs/.chrome-review*/
+docs/*.visual-check.*
+
+# --- Demo recordings and recording output -----------------------------------
+# Raw takes, ffmpeg intermediates and exports all land here.
 /recordings/
