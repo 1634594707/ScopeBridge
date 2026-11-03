@@ -70,9 +70,27 @@ export interface RequirementSummary {
   deletable?: boolean;
 }
 
+export interface Clarification {
+  id: string;
+  requirement_id: string;
+  source_revision: number;
+  kind: "AI" | "MANUAL";
+  status: "PENDING" | "CONFIRMED";
+  questions: string[];
+  unsupported_requests: string[];
+  answers: string;
+  acknowledged: boolean;
+  acknowledged_unsupported: boolean;
+  reason_code: string | null;
+  note: string;
+  confirmed_at: string | null;
+  created_at: string;
+}
+
 export interface RequirementDetail {
   requirement: RequirementSummary;
   messages: Message[];
+  clarification: Clarification | null;
 }
 
 export interface Violation {
@@ -125,6 +143,7 @@ export interface Quote {
   expires_at: string | null;
   created_at: string;
   items: QuoteItem[];
+  clarification: Clarification | null;
 }
 
 export interface Payment {
@@ -172,6 +191,7 @@ export interface PortalView {
   quotes: Quote[];
   payments: Payment[];
   order: OrderSnapshot | null;
+  clarification: Clarification | null;
   service_rule_version: number;
   currency: string;
 }

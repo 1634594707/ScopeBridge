@@ -148,6 +148,28 @@ export default function QuotePage() {
             clientBusiness={brief?.client_business}
             actions={action}
           />
+          {data.clarification ? (
+            <Card className="px-5 py-4">
+              <span className="label">Clarification</span>
+              <p className="mt-1 text-[12px] leading-relaxed text-ink-muted">
+                {data.clarification.kind === "MANUAL"
+                  ? "Manual clarification, not AI-assisted"
+                  : "AI-assisted clarification"}{" "}
+                · {data.clarification.status.toLowerCase()} · rev{" "}
+                {data.clarification.source_revision}
+              </p>
+              {data.clarification.note ? (
+                <p className="mt-1 text-[12px] leading-relaxed text-ink-faint">
+                  {data.clarification.note}
+                </p>
+              ) : null}
+              {data.clarification.answers ? (
+                <p className="mt-1 text-[12px] leading-relaxed text-ink-muted">
+                  Client answer: {data.clarification.answers}
+                </p>
+              ) : null}
+            </Card>
+          ) : null}
           {previousQuote && data ? <QuoteDiff current={data} previous={previousQuote} /> : null}
           {error ? <p className="text-[12px] text-flag-bad">{error.message}</p> : null}
         </div>

@@ -7,6 +7,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.clarifications.schemas import ClarificationOut
+
 
 class QuoteItemOut(BaseModel):
     id: UUID
@@ -35,6 +37,7 @@ class QuoteOut(BaseModel):
     expires_at: datetime | None
     created_at: datetime
     items: list[QuoteItemOut]
+    clarification: ClarificationOut | None
 
 
 class QuoteCreate(BaseModel):

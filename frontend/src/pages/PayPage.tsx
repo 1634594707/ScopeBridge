@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import { AlertTriangle, ArrowRight, RefreshCw, ShieldCheck } from "lucide-react";
 import { api, ApiError } from "../lib/api";
@@ -13,7 +13,7 @@ export default function PayPage() {
   const [params] = useSearchParams();
   // PayPal appends token + PayerID on the approve-return navigation. token alone
   // also appears on buyer cancel, so PayerID is what proves the buyer came back
-  // from approving. See .agents/notes/implemented/bug-fix/2026-10-31-paypal-return-auto-capture.md
+  // from approving; without it this page must not auto-capture.
   const returnedFromPaypal = params.has("token") && params.has("PayerID");
   const autoTried = useRef(false);
 
@@ -27,9 +27,15 @@ export default function PayPage() {
         : false,
   });
 
+  const queryClient = useQueryClient();
   const capture = useMutation({
     mutationFn: () => api.capturePayment(paymentId),
-    onSuccess: () => payment.refetch(),
+    onSuccess: () => {
+      // The snapshot is written in the same transaction as COMPLETED; refetching the
+      // payment alone leaves the order summary stale until a manual reload.
+      payment.refetch();
+      queryClient.invalidateQueries({ queryKey: ["portal"] });
+    },
   });
 
   const requirementId = payment.data?.requirement_id ?? null;

@@ -32,6 +32,7 @@ get_settings.cache_clear()
 
 from app.accounts import models as accounts_models  # noqa: E402,F401
 from app.ai import models as ai_models  # noqa: E402,F401
+from app.clarifications import models as clarifications_models  # noqa: E402,F401
 from app.core.db import Base, SessionLocal, engine  # noqa: E402
 from app.payments import models as payments_models  # noqa: E402,F401
 from app.proposals import models as proposals_models  # noqa: E402,F401

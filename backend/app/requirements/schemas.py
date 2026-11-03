@@ -7,6 +7,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, Field
 
+from app.clarifications.schemas import ClarificationOut
 from app.payments.schemas import PaymentOut, SnapshotOut
 from app.proposals.schemas import ProposalOut
 from app.quotes.schemas import QuoteOut
@@ -46,6 +47,7 @@ class SellerRequirementSummary(RequirementSummary):
 class RequirementDetail(BaseModel):
     requirement: RequirementSummary
     messages: list[MessageOut]
+    clarification: ClarificationOut | None
 
 
 class IntakeRequest(BaseModel):
@@ -78,5 +80,6 @@ class PortalView(BaseModel):
     quotes: list[QuoteOut]
     payments: list[PaymentOut]
     order: SnapshotOut | None
+    clarification: ClarificationOut | None
     service_rule_version: int
     currency: str

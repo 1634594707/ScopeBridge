@@ -111,6 +111,7 @@ def delete_for_seller(db: Session, requirement: Requirement) -> None:
     A brief that has been paid carries an order snapshot, and the snapshot is
     the receipt — it must never disappear, so payment blocks the delete.
     """
+    from app.clarifications.models import RequirementClarification
     from app.payments.models import ACTIVE_STATUSES, OrderSnapshot, PaymentAttempt
     from app.proposals.models import Proposal
     from app.quotes.models import QuoteItem, QuoteVersion
@@ -148,6 +149,11 @@ def delete_for_seller(db: Session, requirement: Requirement) -> None:
     db.execute(delete(PaymentAttempt).where(PaymentAttempt.requirement_id == requirement.id))
     db.execute(delete(QuoteItem).where(QuoteItem.quote_version_id.in_(quote_version_ids)))
     db.execute(delete(QuoteVersion).where(QuoteVersion.requirement_id == requirement.id))
+    db.execute(
+        delete(RequirementClarification).where(
+            RequirementClarification.requirement_id == requirement.id
+        )
+    )
     db.execute(delete(Proposal).where(Proposal.requirement_id == requirement.id))
     db.execute(
         delete(RequirementMessage).where(RequirementMessage.requirement_id == requirement.id)

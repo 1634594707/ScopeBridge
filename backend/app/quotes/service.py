@@ -8,6 +8,7 @@ from uuid import UUID
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
+from app.clarifications import service as clarifications_service
 from app.core.errors import conflict, forbidden, not_found
 from app.proposals.service import load_proposal
 from app.quotes.models import QuoteItem, QuoteVersion
@@ -68,6 +69,7 @@ def create_quote(
             {"source_revision": proposal.source_revision, "current_revision": requirement.revision},
         )
 
+    clarification = clarifications_service.require_confirmed(db, requirement)
     supersede_open(db, requirement.id)
 
     next_number = int(
@@ -83,6 +85,7 @@ def create_quote(
         requirement_id=requirement.id,
         proposal_id=proposal.id,
         rule_version_id=rule_row.id,
+        clarification_id=clarification.id,
         quote_number=next_number,
         source_revision=requirement.revision,
         currency=result.currency,
@@ -215,6 +218,7 @@ def serialize(quote: QuoteVersion) -> QuoteOut:
         superseded_at=quote.superseded_at,
         expires_at=quote.expires_at,
         created_at=quote.created_at,
+        clarification=clarifications_service.serialize(quote.clarification),
         items=[
             QuoteItemOut(
                 id=item.id,

@@ -7,7 +7,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from fastapi.testclient import TestClient
-from helpers import client_browser, create_brief, seller_browser
+from helpers import client_browser, confirm_test_clarification, create_brief, seller_browser
 
 from app.core.config import get_settings
 from app.payments.models import PaymentAttempt
@@ -71,6 +71,7 @@ def _confirmed_quote() -> tuple[TestClient, dict, TestClient, dict, str, str]:
         f"/api/portal/requirements/{requirement_id}/proposals/{proposal['id']}/select",
         headers=brief_headers,
     )
+    confirm_test_clarification(requirement_id)
 
     quote = seller_client.post(
         f"/api/requirements/{requirement_id}/quotes",
@@ -305,6 +306,7 @@ def test_unconfirmed_quote_cannot_start_payment(seller, rules, fake_paypal) -> N
         json={"label": "One page", "pages": 1, "requested_features": ["landing_pages"]},
         headers=seller_headers,
     ).json()
+    confirm_test_clarification(requirement_id)
     quote = seller_client.post(
         f"/api/requirements/{requirement_id}/quotes",
         json={"proposal_id": proposal["id"]},

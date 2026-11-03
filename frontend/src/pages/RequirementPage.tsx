@@ -6,6 +6,7 @@ import { api, ApiError } from "../lib/api";
 import { formatDeadline, formatMoney } from "../lib/format";
 import { Button } from "../components/Button";
 import { Card, CardHeader } from "../components/Card";
+import { ClarificationCard } from "../components/ClarificationCard";
 import { Field, TextArea } from "../components/Field";
 import { MessageTimeline } from "../components/MessageTimeline";
 import { ModelDraftPanel } from "../components/ModelDraftPanel";
@@ -69,6 +70,18 @@ export default function RequirementPage() {
     },
   });
 
+  const manualClarification = useMutation({
+    mutationFn: (payload: {
+      note: string;
+      reason: "model_not_configured" | "model_unavailable" | "model_output_invalid";
+    }) =>
+      api.manualClarification(id, {
+        note: payload.note,
+        reason_code: payload.reason,
+      }),
+    onSuccess: refresh,
+  });
+
   if (requirement.isLoading) {
     return <div className="py-20 text-sm text-ink-faint">Loading brief…</div>;
   }
@@ -84,6 +97,9 @@ export default function RequirementPage() {
   const currentProposals = proposalRows.filter((row) => row.source_revision === brief.revision);
   const quoteError = createQuote.error instanceof ApiError ? createQuote.error : null;
   const replyError = addReply.error instanceof ApiError ? addReply.error : null;
+  const clarificationError =
+    manualClarification.error instanceof ApiError ? manualClarification.error : null;
+  const clarificationReady = detail.clarification?.status === "CONFIRMED";
   const closed =
     brief.status === "CLOSED" || quoteRows.some((quote) => quote.status === "PAID");
 
@@ -238,8 +254,19 @@ export default function RequirementPage() {
             </Card>
           ) : (
             <>
+              <ClarificationCard
+                clarification={detail.clarification}
+                mode="seller"
+                busy={manualClarification.isPending}
+                error={clarificationError?.message}
+                onManual={(note, reason) =>
+                  manualClarification.mutate({ note, reason })
+                }
+              />
+
               <ModelDraftPanel
                 requirementId={id}
+                hasClarification={detail.clarification !== null}
                 onUse={(candidate) =>
                   setSeed({
                     key: `${candidate.label}-${candidate.total_minor}-${Date.now()}`,
@@ -307,7 +334,13 @@ export default function RequirementPage() {
                           <Button
                             size="sm"
                             variant="secondary"
-                            disabled={closed || !proposal.feasible || stale || createQuote.isPending}
+                            disabled={
+                              closed ||
+                              !clarificationReady ||
+                              !proposal.feasible ||
+                              stale ||
+                              createQuote.isPending
+                            }
                             busy={createQuote.isPending && createQuote.variables === proposal.id}
                             icon={<FileText size={13} />}
                             onClick={() => createQuote.mutate(proposal.id)}
@@ -331,6 +364,11 @@ export default function RequirementPage() {
             )}
           </Card>
 
+          {!closed && !clarificationReady ? (
+            <p className="text-[12px] leading-relaxed text-flag-warn">
+              A confirmed clarification is required for this revision before a quote can be issued.
+            </p>
+          ) : null}
           {quoteError ? (
             <p className="text-[12px] text-flag-bad">{quoteError.message}</p>
           ) : null}

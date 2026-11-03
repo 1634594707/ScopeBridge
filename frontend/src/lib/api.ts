@@ -1,6 +1,7 @@
 import type {
   ApiErrorBody,
   AttentionPayment,
+  Clarification,
   ScopeEstimate,
   Extraction,
   ExtractionEnvelope,
@@ -129,6 +130,27 @@ export const api = {
 
   latestExtraction: (id: string) =>
     request<ExtractionEnvelope>(`/requirements/${id}/extractions/latest`),
+
+  manualClarification: (
+    id: string,
+    payload: {
+      note: string;
+      reason_code: "model_not_configured" | "model_unavailable" | "model_output_invalid";
+    },
+  ) => request<Clarification>(`/requirements/${id}/clarifications/manual`, {
+    method: "POST",
+    body: payload,
+  }),
+
+  confirmClarification: (
+    requirementId: string,
+    clarificationId: string,
+    payload: { answers: string; acknowledged: boolean; acknowledged_unsupported: boolean },
+  ) =>
+    request<Clarification>(
+      `/portal/requirements/${requirementId}/clarifications/${clarificationId}/confirm`,
+      { method: "POST", body: payload },
+    ),
 
   createQuote: (id: string, payload: { proposal_id: string; scope_summary?: string }) =>
     request<Quote>(`/requirements/${id}/quotes`, { method: "POST", body: payload }),

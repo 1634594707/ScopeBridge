@@ -81,3 +81,34 @@ def create_brief(browser: TestClient, headers: dict[str, str], **overrides) -> s
     )
     assert response.status_code == 201, response.text
     return response.json()["requirement_id"]
+
+
+def confirm_test_clarification(requirement_id: str) -> None:
+    """Create a confirmed AI clarification for tests that only exercise quotes."""
+    from datetime import UTC, datetime
+    from uuid import UUID
+
+    from app.clarifications.models import RequirementClarification
+    from app.core.db import SessionLocal
+    from app.requirements.models import Requirement
+
+    with SessionLocal() as db:
+        requirement = db.get(Requirement, UUID(requirement_id))
+        assert requirement is not None
+        now = datetime.now(UTC)
+        row = RequirementClarification(
+            requirement_id=requirement.id,
+            source_revision=requirement.revision,
+            kind="AI",
+            status="CONFIRMED",
+            questions=[],
+            unsupported_requests=[],
+            answers="Test fixture confirmation.",
+            acknowledged=True,
+            acknowledged_unsupported=True,
+            created_by=requirement.seller_id,
+            confirmed_by=requirement.client_id,
+            confirmed_at=now,
+        )
+        db.add(row)
+        db.commit()

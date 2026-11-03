@@ -29,6 +29,7 @@ from app.ai.schemas import (
     PricedCandidateOut,
     RecordOut,
 )
+from app.clarifications import service as clarifications_service
 from app.core.config import get_settings
 from app.core.errors import ApiError
 from app.proposals.schemas import ViolationOut
@@ -98,7 +99,15 @@ def extract(db: Session, requirement: Requirement) -> ExtractionOut:
     record = _record(
         db, requirement, raw, facts.model_dump(), "OK", None, None, latency_ms
     )
-    return _to_out(record, facts, requirement, rule_set)
+    out = _to_out(record, facts, requirement, rule_set)
+    clarifications_service.create_ai_clarification(
+        db,
+        requirement,
+        record,
+        questions=out.questions,
+        unsupported_requests=out.unsupported_requests,
+    )
+    return out
 
 
 def latest(db: Session, requirement: Requirement) -> ExtractionOut | None:

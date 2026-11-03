@@ -21,6 +21,7 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.clarifications.models import RequirementClarification
 from app.core.db import Base
 
 
@@ -36,6 +37,9 @@ class QuoteVersion(Base):
     )
     proposal_id: Mapped[UUID] = mapped_column(ForeignKey("proposals.id", ondelete="RESTRICT"))
     rule_version_id: Mapped[UUID] = mapped_column(ForeignKey("service_rule_versions.id"))
+    clarification_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("requirement_clarifications.id", ondelete="SET NULL"), nullable=True
+    )
     quote_number: Mapped[int] = mapped_column(Integer)
     source_revision: Mapped[int] = mapped_column(Integer)
     currency: Mapped[str] = mapped_column(String(3), default="USD")
@@ -70,6 +74,7 @@ class QuoteVersion(Base):
         cascade="all, delete-orphan",
         lazy="selectin",
     )
+    clarification: Mapped[RequirementClarification | None] = relationship(lazy="selectin")
 
 
 class QuoteItem(Base):

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle, Sparkles } from "lucide-react";
 import { api, ApiError } from "../lib/api";
@@ -10,11 +11,17 @@ import { Tag } from "./Tag";
 
 interface ModelDraftPanelProps {
   requirementId: string;
+  hasClarification?: boolean;
   onUse: (candidate: PricedCandidate) => void;
 }
 
-export function ModelDraftPanel({ requirementId, onUse }: ModelDraftPanelProps) {
+export function ModelDraftPanel({
+  requirementId,
+  hasClarification = false,
+  onUse,
+}: ModelDraftPanelProps) {
   const queryClient = useQueryClient();
+  const [confirming, setConfirming] = useState(false);
   const previous = useQuery({
     queryKey: ["extraction", requirementId],
     queryFn: () => api.latestExtraction(requirementId),
@@ -26,6 +33,7 @@ export function ModelDraftPanel({ requirementId, onUse }: ModelDraftPanelProps) 
     mutationFn: () => api.requestExtraction(requirementId),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["extraction", requirementId] });
+      queryClient.invalidateQueries({ queryKey: ["requirement", requirementId] });
     },
   });
 
@@ -56,10 +64,42 @@ export function ModelDraftPanel({ requirementId, onUse }: ModelDraftPanelProps) 
         variant="secondary"
         busy={draft.isPending}
         icon={<Sparkles size={15} />}
-        onClick={() => draft.mutate()}
+        onClick={() => {
+          if (hasClarification) {
+            setConfirming(true);
+            return;
+          }
+          draft.mutate();
+        }}
       >
         {draft.isPending ? "Reading the brief…" : "Draft with the model"}
       </Button>
+
+      {confirming ? (
+        <div className="rounded-md border border-flag-warn/40 bg-flag-warn/5 px-3 py-3">
+          <p className="text-[12px] leading-relaxed text-flag-warn">
+            This revision already has a clarification. A successful re-extraction creates a new
+            pending AI clarification and locks quote creation until the client confirms it again.
+            If the model fails, the current clarification stays.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setConfirming(false);
+                draft.mutate();
+              }}
+            >
+              Re-extract and require confirmation
+            </Button>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setConfirming(false)}>
+              Cancel
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {error ? (
         <div className="flex items-start gap-2 rounded-md border border-flag-bad/30 bg-flag-bad/5 px-3 py-2">

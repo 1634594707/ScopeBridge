@@ -6,6 +6,7 @@ import { api, ApiError } from "../lib/api";
 import { formatDeadline, formatMoney } from "../lib/format";
 import { Button } from "../components/Button";
 import { Card, CardHeader } from "../components/Card";
+import { ClarificationCard } from "../components/ClarificationCard";
 import { Field, Input, TextArea } from "../components/Field";
 import { MessageTimeline } from "../components/MessageTimeline";
 import { Money } from "../components/Money";
@@ -37,6 +38,21 @@ export default function PortalPage() {
 
   const confirm = useMutation({
     mutationFn: (quoteId: string) => api.confirmQuote(id, quoteId),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["portal", id] }),
+  });
+
+  const confirmClarification = useMutation({
+    mutationFn: (payload: {
+      clarificationId: string;
+      answers: string;
+      acknowledged: boolean;
+      acknowledgedUnsupported: boolean;
+    }) =>
+      api.confirmClarification(id, payload.clarificationId, {
+        answers: payload.answers,
+        acknowledged: payload.acknowledged,
+        acknowledged_unsupported: payload.acknowledgedUnsupported,
+      }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["portal", id] }),
   });
 
@@ -182,6 +198,27 @@ export default function PortalPage() {
 
       <div className="grid gap-8 lg:grid-cols-[1.55fr_0.85fr]">
         <div className="flex flex-col gap-8">
+          <ClarificationCard
+            clarification={data.clarification}
+            mode="client"
+            busy={confirmClarification.isPending}
+            error={
+              confirmClarification.error instanceof ApiError
+                ? confirmClarification.error.message
+                : ""
+            }
+            onConfirm={(answers, acknowledged, acknowledgedUnsupported) => {
+              if (data.clarification) {
+                confirmClarification.mutate({
+                  clarificationId: data.clarification.id,
+                  answers,
+                  acknowledged,
+                  acknowledgedUnsupported,
+                });
+              }
+            }}
+          />
+
           <section className="flex flex-col gap-4">
             <div className="flex items-end justify-between gap-4">
               <div className="flex flex-col gap-1">
@@ -270,7 +307,9 @@ export default function PortalPage() {
                     order={data.order}
                     busy={startPayment.isPending}
                     error={
-                      startPayment.error instanceof ApiError ? startPayment.error.message : ""
+                      startPayment.error instanceof ApiError
+                        ? `${startPayment.error.message} (${startPayment.error.code})`
+                        : ""
                     }
                     onStart={() => startPayment.mutate(latestQuote.id)}
                   />

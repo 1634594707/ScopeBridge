@@ -16,6 +16,7 @@ from app.api.deps import (
     require_csrf,
     require_seller,
 )
+from app.clarifications import service as clarifications_service
 from app.core.config import get_settings
 from app.core.db import get_db
 from app.core.errors import ApiError
@@ -84,9 +85,13 @@ def read_requirement(
     db: Session = Depends(get_db),
 ) -> RequirementDetail:
     requirement = service.load_for_seller(db, requirement_id, auth.user.id)
+    clarification = clarifications_service.latest_for_revision(
+        db, requirement.id, requirement.revision
+    )
     return RequirementDetail(
         requirement=service.summarize(requirement),
         messages=[service.serialize_message(message) for message in requirement.messages],
+        clarification=clarifications_service.serialize(clarification),
     )
 
 
@@ -137,6 +142,9 @@ def read_portal(
     requirement = service.load_for_client(db, requirement_id, auth.user.id)
     rules = rules_service.get_active_rules(db)
     order = payments_service.snapshot_for_requirement(db, requirement.id)
+    clarification = clarifications_service.latest_for_revision(
+        db, requirement.id, requirement.revision
+    )
     return PortalView(
         requirement=service.summarize(requirement),
         messages=[service.serialize_message(message) for message in requirement.messages],
@@ -144,6 +152,7 @@ def read_portal(
         quotes=quotes_service.list_for_requirement(db, requirement.id),
         payments=payments_service.list_for_requirement(db, requirement.id),
         order=payments_service.serialize_snapshot(order) if order else None,
+        clarification=clarifications_service.serialize(clarification),
         service_rule_version=rules.version_no,
         currency=rules.currency,
     )

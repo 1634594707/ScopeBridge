@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from fastapi.testclient import TestClient
-from helpers import client_browser, create_brief, seller_browser
+from helpers import client_browser, confirm_test_clarification, create_brief, seller_browser
 
 
 def _proposal(
@@ -77,6 +77,7 @@ def test_full_manual_quote_flow(seller, rules) -> None:
     )
     assert blocked_quote.status_code == 409
 
+    confirm_test_clarification(requirement_id)
     created = seller_client.post(
         f"/api/requirements/{requirement_id}/quotes",
         json={"proposal_id": feasible["id"], "scope_summary": "One page, external ordering"},
@@ -191,6 +192,7 @@ def test_new_revision_supersedes_the_open_draft(seller, rules) -> None:
     requirement_id = create_brief(brief_client, brief_headers)
     proposal = _proposal(seller_client, requirement_id, seller_headers)
 
+    confirm_test_clarification(requirement_id)
     quote = seller_client.post(
         f"/api/requirements/{requirement_id}/quotes",
         json={"proposal_id": proposal["id"]},
