@@ -11,7 +11,6 @@ attributable to a signed-in account.
 [![License: MIT](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
 ![Python](https://img.shields.io/badge/Python-3.12+-blue.svg)
 ![Node](https://img.shields.io/badge/Node-20%2B%20%7C%20pnpm-blue.svg)
-[![image](https://img.shields.io/badge/ghcr.io-scopebridge-2496ED?logo=docker&logoColor=white)](https://github.com/1634594707/ScopeBridge/pkgs/container/scopebridge)
 
 > **Status:** working prototype, PayPal **sandbox** only, no hosted demo — every step below runs
 > from this repository. Known gaps are listed under [Known limitations](#known-limitations).
@@ -131,13 +130,14 @@ then runs `uvicorn`. `POSTGRES_PASSWORD`, `SESSION_SECRET`, `SELLER_PASSWORD` an
 `CLIENT_PASSWORD` come from `.env`, exactly as in the `uv` path. A plain `docker compose up -d`
 still starts the database alone.
 
-An image is published to GHCR on every push to `main` and on every tag:
+The same image runs on its own against any PostgreSQL:
 
 ```bash
+docker build -t scopebridge .
 docker run --rm -p 8000:8000 \
   -e DATABASE_URL=postgresql+psycopg://user:pass@host:5432/scopebridge \
   -e SESSION_SECRET=... -e SELLER_PASSWORD=... -e CLIENT_PASSWORD=... \
-  ghcr.io/1634594707/scopebridge:latest
+  scopebridge
 ```
 
 ### Demo walkthrough
