@@ -4,6 +4,14 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+    # Documentation-only changes cannot alter the image; `.dockerignore` drops
+    # these paths from the build context anyway.
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".gitignore"
+      - ".local-archive/**"
   workflow_dispatch:
 
 jobs:
