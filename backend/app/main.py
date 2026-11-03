@@ -3,11 +3,15 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -15,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.api.router import api_router
 from app.core.config import get_settings
 from app.core.db import SessionLocal, get_db
-from app.core.errors import ApiError, register_error_handlers
+from app.core.errors import ApiError, not_found, register_error_handlers
 from app.payments.service import recover_stale_attempts
 
 logger = logging.getLogger("scopebridge")
@@ -78,7 +82,38 @@ def create_app() -> FastAPI:
             ) from exc
         return {"status": "ok", "database": "ok"}
 
+    serve_frontend(app, Path(os.environ.get("FRONTEND_DIST", default_dist())))
     return app
+
+
+def default_dist() -> Path:
+    return Path(__file__).resolve().parent.parent / "static"
+
+
+def serve_frontend(app: FastAPI, dist: Path) -> None:
+    """Serve the built SPA from the same origin as the API.
+
+    The frontend calls `/api...` and leans on the session cookie, so shipping both
+    from one origin keeps CORS and cookie rules out of the deployment. When the
+    directory is absent (local dev with `vite`, or the test suite) nothing is
+    mounted and the API behaves exactly as before.
+    """
+    index = dist / "index.html"
+    if not index.is_file():
+        return
+    root = dist.resolve()
+    assets = dist / "assets"
+    if assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets), name="assets")
+
+    @app.get("/{path:path}", include_in_schema=False)
+    def spa(path: str) -> FileResponse:
+        if path.startswith("api/"):
+            raise not_found("No such endpoint")
+        candidate = (dist / path).resolve()
+        if path and root in candidate.parents and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(index)
 
 
 app = create_app()
